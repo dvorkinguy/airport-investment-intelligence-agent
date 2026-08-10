@@ -1,0 +1,1277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Airport Investment Intelligence Agent - System Map</title>
+<meta name="description" content="Interactive 3D map of the Airport Investment Intelligence Agent: browser, Vercel UI, Cloud Run LangGraph agent, Neon scoring views, OpenRouter." />
+<style>
+  :root{
+    --bg:#070a10;
+    --panel:rgba(14,19,29,.86);
+    --panel-solid:#0e131d;
+    --border:rgba(148,163,184,.20);
+    --border-strong:rgba(148,163,184,.34);
+    --fg:#e6edf6;
+    --fg-dim:#93a3b8;
+    --fg-faint:#6b7c92;
+    --accent:#7aa2f7;
+    --c-client:#7aa2f7;
+    --c-edge:#c4b5fd;
+    --c-runtime:#fbbf24;
+    --c-data:#34d399;
+    --c-model:#f472b6;
+    --c-source:#94a3b8;
+    --c-cross:#22d3ee;
+    --radius:10px;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    overflow:hidden;-webkit-font-smoothing:antialiased;
+  }
+  canvas{display:block}
+  #stage{position:fixed;inset:0}
+
+  /* ---------- chrome ---------- */
+  .hud{position:fixed;z-index:5;pointer-events:none}
+  .hud > *{pointer-events:auto}
+
+  #topbar{
+    top:0;left:0;right:0;display:flex;align-items:center;gap:16px;
+    padding:10px 16px;background:linear-gradient(180deg,rgba(7,10,16,.94),rgba(7,10,16,0));
+  }
+  #brand{display:flex;flex-direction:column;gap:2px;min-width:0}
+  #brand h1{margin:0;font-size:14px;font-weight:650;letter-spacing:.2px;white-space:nowrap}
+  #brand p{margin:0;font-size:11px;color:var(--fg-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+
+  button.btn{
+    font-family:var(--sans);font-size:12px;font-weight:560;letter-spacing:.2px;
+    color:var(--fg);background:rgba(30,41,59,.72);border:1px solid var(--border-strong);
+    padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap;
+    transition:background .15s ease,border-color .15s ease,color .15s ease;
+    backdrop-filter:blur(8px);
+  }
+  button.btn:hover{background:rgba(51,65,85,.86);border-color:rgba(148,163,184,.55)}
+  button.btn.on{background:rgba(122,162,247,.18);border-color:rgba(122,162,247,.62);color:#cfe0ff}
+  button.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ---------- legend ---------- */
+  #legend{
+    left:16px;bottom:16px;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:11px 13px;backdrop-filter:blur(10px);max-width:250px;
+  }
+  #legend h2{margin:0 0 8px;font-size:10px;font-weight:650;letter-spacing:1.1px;text-transform:uppercase;color:var(--fg-faint)}
+  .lg{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--fg-dim);line-height:1.7}
+  .sw{width:10px;height:10px;border-radius:3px;flex:none;box-shadow:0 0 8px currentColor}
+  #legend .note{margin:9px 0 0;padding-top:8px;border-top:1px solid var(--border);font-size:10.5px;color:var(--fg-faint);line-height:1.5}
+  #legend .note b{color:var(--fg-dim);font-weight:600}
+
+  /* ---------- caption ---------- */
+  #caption{
+    left:50%;transform:translateX(-50%);bottom:16px;width:min(760px,calc(100vw - 300px));
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:12px 15px;backdrop-filter:blur(10px);opacity:0;transition:opacity .3s ease;
+  }
+  #caption.show{opacity:1}
+  #capHead{display:flex;align-items:baseline;gap:10px;margin-bottom:5px}
+  #capStep{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.6px;flex:none}
+  #capTitle{font-size:13px;font-weight:620;letter-spacing:.1px}
+  #capBody{font-size:12px;line-height:1.62;color:var(--fg-dim)}
+  #capBody code{font-family:var(--mono);font-size:11px;color:#a8c7ff;background:rgba(122,162,247,.10);padding:1px 4px;border-radius:4px}
+  #capBar{height:2px;margin-top:9px;background:rgba(148,163,184,.16);border-radius:2px;overflow:hidden}
+  #capFill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width .12s linear}
+
+  /* ---------- info card ---------- */
+  #info{
+    right:16px;top:62px;width:min(330px,calc(100vw - 32px));max-height:calc(100vh - 100px);
+    overflow-y:auto;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);backdrop-filter:blur(10px);
+    transform:translateX(16px);opacity:0;visibility:hidden;
+    transition:opacity .2s ease,transform .2s ease,visibility .2s;
+  }
+  #info.show{opacity:1;transform:none;visibility:visible}
+  #info::-webkit-scrollbar{width:8px}
+  #info::-webkit-scrollbar-thumb{background:rgba(148,163,184,.24);border-radius:8px}
+  #infoTop{display:flex;align-items:flex-start;gap:10px;padding:13px 14px 10px;border-bottom:1px solid var(--border)}
+  #infoDot{width:11px;height:11px;border-radius:3px;margin-top:4px;flex:none;box-shadow:0 0 10px currentColor}
+  #infoTitleWrap{min-width:0;flex:1}
+  #infoTitle{font-size:13.5px;font-weight:660;line-height:1.3;word-break:break-word}
+  #infoTier{font-size:10px;letter-spacing:.9px;text-transform:uppercase;color:var(--fg-faint);margin-top:3px}
+  #infoClose{
+    background:none;border:none;color:var(--fg-faint);font-size:19px;line-height:1;cursor:pointer;
+    padding:0 2px;flex:none;font-family:var(--sans)
+  }
+  #infoClose:hover{color:var(--fg)}
+  .sec{padding:11px 14px;border-bottom:1px solid var(--border)}
+  .sec:last-child{border-bottom:none}
+  .sec h3{margin:0 0 5px;font-size:9.5px;font-weight:650;letter-spacing:1.1px;text-transform:uppercase;color:var(--fg-faint)}
+  .sec p{margin:0;font-size:12px;line-height:1.62;color:var(--fg)}
+  .sec.tech p{color:var(--fg-dim);font-size:11.5px}
+  .sec code{font-family:var(--mono);font-size:11px;color:#a8c7ff;background:rgba(122,162,247,.10);padding:1px 4px;border-radius:4px;word-break:break-word}
+  .sec.adr p{color:var(--fg-dim);font-size:11.5px;font-family:var(--mono)}
+  .badge{
+    display:inline-block;font-size:9.5px;font-weight:650;letter-spacing:1px;text-transform:uppercase;
+    padding:2.5px 7px;border-radius:5px;margin-top:6px;
+    background:rgba(148,163,184,.14);border:1px solid rgba(148,163,184,.34);color:#a7b6c9;
+  }
+  .badge.live{background:rgba(52,211,153,.11);border-color:rgba(52,211,153,.34);color:#6ee7b7}
+
+  #hint{
+    right:16px;bottom:16px;font-size:10.5px;color:var(--fg-faint);text-align:right;line-height:1.6;
+    background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 11px;backdrop-filter:blur(10px);
+  }
+  #hint.hide{display:none}
+
+  /* ---------- fallback ---------- */
+  #fallback{
+    position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    padding:24px;background:var(--bg);overflow-y:auto
+  }
+  #fallback.show{display:flex}
+  #fbCard{max-width:660px;width:100%;background:var(--panel-solid);border:1px solid var(--border);border-radius:14px;padding:26px 28px}
+  #fbCard h2{margin:0 0 6px;font-size:17px;font-weight:660}
+  #fbCard .lead{margin:0 0 18px;font-size:13px;color:var(--fg-dim);line-height:1.65}
+  #fbCard pre{
+    margin:0 0 18px;font-family:var(--mono);font-size:11.5px;line-height:1.75;color:var(--fg-dim);
+    background:rgba(0,0,0,.32);border:1px solid var(--border);border-radius:8px;padding:15px;overflow-x:auto;white-space:pre
+  }
+  #fbCard ul{margin:0;padding-left:18px;font-size:12.5px;color:var(--fg-dim);line-height:1.8}
+  #fbCard code{font-family:var(--mono);font-size:11.5px;color:#a8c7ff}
+
+  /* On a 4K window the CSS pixel is unchanged, so the chrome would read as
+     tiny next to a canvas that scales. Step it up past ~2200px. */
+  @media (min-width:2200px){
+    #topbar{padding:14px 24px}
+    #brand h1{font-size:20px} #brand p{font-size:14.5px}
+    button.btn{font-size:16px;padding:10px 18px;border-radius:10px}
+    #legend{max-width:340px;padding:16px 19px;left:24px;bottom:24px}
+    #legend h2{font-size:13px} .lg{font-size:15px} .sw{width:13px;height:13px}
+    #legend .note{font-size:13.5px}
+    #caption{width:min(1120px,calc(100vw - 460px));padding:17px 21px;bottom:24px}
+    #capStep{font-size:14px} #capTitle{font-size:17.5px} #capBody{font-size:16px}
+    #capBody code,.sec code{font-size:14.5px}
+    #info{width:440px;top:86px;right:24px} #infoTitle{font-size:17.5px}
+    #infoTier{font-size:12.5px} .sec h3{font-size:12px}
+    .sec p{font-size:15.5px} .sec.tech p{font-size:15px} .sec.adr p{font-size:15px}
+    .badge{font-size:12px;padding:4px 10px}
+    #hint{font-size:14px;padding:11px 15px;right:24px;bottom:24px}
+  }
+
+  @media (max-width:1100px){
+    #caption{width:min(560px,calc(100vw - 32px))}
+  }
+  @media (max-width:820px){
+    #brand p{display:none}
+    #legend{max-width:200px;font-size:10px}
+    #info{top:auto;bottom:16px;right:16px;left:16px;width:auto;max-height:46vh}
+    #caption{bottom:auto;top:56px;width:calc(100vw - 32px)}
+    #hint{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div class="hud" id="topbar">
+  <div id="brand">
+    <h1>Airport Investment Intelligence Agent</h1>
+    <p>Live system map &middot; source of truth: docs/architecture.md, ADR-001/002/003, services/agent/graph.py</p>
+  </div>
+  <div id="actions">
+    <button class="btn" id="btnRun" type="button">Run a query</button>
+    <button class="btn" id="btnOrbit" type="button">Auto-orbit</button>
+    <button class="btn" id="btnReset" type="button">Reset view</button>
+  </div>
+</div>
+
+<div class="hud" id="legend">
+  <h2>Tiers</h2>
+  <div id="legendRows"></div>
+  <p class="note"><b>Dashed + faded</b> = planned, no code yet. A badge names anything not yet deployed. Everything else runs today.</p>
+</div>
+
+<div class="hud" id="caption">
+  <div id="capHead">
+    <span id="capStep">&mdash;</span>
+    <span id="capTitle"></span>
+  </div>
+  <div id="capBody"></div>
+  <div id="capBar"><div id="capFill"></div></div>
+</div>
+
+<div class="hud" id="info">
+  <div id="infoTop">
+    <span id="infoDot"></span>
+    <div id="infoTitleWrap">
+      <div id="infoTitle"></div>
+      <div id="infoTier"></div>
+    </div>
+    <button id="infoClose" type="button" aria-label="Close">&times;</button>
+  </div>
+  <div class="sec plain"><h3>What it does</h3><p id="infoPlain"></p></div>
+  <div class="sec tech"><h3>Technical</h3><p id="infoTech"></p></div>
+  <div class="sec adr"><h3>Decision record</h3><p id="infoAdr"></p></div>
+  <div class="sec" id="infoStatusSec"><h3>Status</h3><span class="badge" id="infoBadge"></span></div>
+</div>
+
+<div class="hud" id="hint">
+  Drag to orbit &middot; scroll to zoom &middot; right-drag to pan<br>Click any node for detail &middot; zoom in for more labels
+</div>
+
+<div id="fallback">
+  <div id="fbCard">
+    <h2 id="fbTitle">3D view unavailable</h2>
+    <p class="lead" id="fbLead">Your browser could not start WebGL. The architecture in text:</p>
+<pre>User (browser)
+ |
+ +-- Next.js chat UI, apps/web            [built; Vercel deploy planned]
+ |     +-- Clerk sign-in + Cloudflare Turnstile                [planned]
+ |     +-- airport.guydvorkin.com -> Vercel CNAME                [planned]
+ |
+ +-- Cloud Run - FastAPI + LangGraph agent            [deploy planned; runs locally]
+ |     |  POST /chat (SSE stream)
+ |     |
+ |     |  START -> agent -> route() -> tools -> agent -> ... -> END
+ |     |    agent node : one LLM call per turn, tool-bound
+ |     |    tools node : runs tools concurrently, lifts assumptions into state
+ |     |    checkpointer: AsyncPostgresSaver -> Neon
+ |     |
+ |     +-- tools: rank_airports, compare_airports, airport_metrics,
+ |     |          unmet_demand_estimate, resolve_airport
+ |     +-- Langfuse traces                                     [planned - Tier 2 stub]
+ |
+ +-- Neon Postgres
+ |     tables: airports, regions, bts_t100, bts_ontime
+ |     views : v_airport_metrics, v_congestion,
+ |             v_opportunity_score, v_unmet_demand_est
+ |     state : LangGraph checkpoints  |  queries log table     [planned]
+ |
+ +-- OpenRouter - AGENT_MODEL=anthropic/claude-sonnet-4.5
+                  fallback default openai/gpt-4o-mini
+
+Ingestion (snapshot-first): BTS T-100 + BTS on-time + OurAirports/FAA -> Neon</pre>
+    <ul>
+      <li>Hardware acceleration may be off in <code>chrome://settings/system</code>.</li>
+      <li>If the page is offline, Three.js cannot load from the CDN.</li>
+      <li>Full reasoning trail: <code>docs/adr/</code></li>
+    </ul>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script>
+  // Fires only if the module below never boots (offline, blocked CDN, no WebGL).
+  window.__booted = false;
+  window.__fail = function (title, lead) {
+    if (window.__booted) return;
+    var fb = document.getElementById('fallback');
+    if (title) document.getElementById('fbTitle').textContent = title;
+    if (lead) document.getElementById('fbLead').textContent = lead;
+    fb.classList.add('show');
+  };
+  setTimeout(function () {
+    window.__fail('Could not load the 3D renderer',
+      'Three.js did not load from the CDN (jsdelivr). Check the connection, then reload. The architecture in text:');
+  }, 9000);
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ==========================================================================
+   0. WebGL probe
+   ========================================================================== */
+(function probe () {
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl2') || c.getContext('webgl');
+    if (!gl) throw new Error('no context');
+  } catch (e) {
+    window.__booted = true;
+    window.__fail('3D view unavailable',
+      'This browser could not create a WebGL context. The architecture in text:');
+    throw new Error('webgl-unavailable');
+  }
+})();
+
+/* ==========================================================================
+   1. Tier palette
+   ========================================================================== */
+const TIERS = {
+  client:  { name: 'Client',                 color: 0x7aa2f7 },
+  edge:    { name: 'Edge / UI (Vercel)',     color: 0xc4b5fd },
+  runtime: { name: 'Agent runtime (Cloud Run)', color: 0xfbbf24 },
+  data:    { name: 'Data plane (Neon)',      color: 0x34d399 },
+  model:   { name: 'Model gateway',          color: 0xf472b6 },
+  source:  { name: 'Sources + ingestion',    color: 0x94a3b8 },
+  cross:   { name: 'Observability / auth',   color: 0x22d3ee }
+};
+const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+
+/* ==========================================================================
+   2. The system. Every entry is verified against the repo.
+      status: live (default) | local (built, not deployed) | planned (no code yet).
+   ========================================================================== */
+const NODES = [
+  /* --- client ----------------------------------------------------------- */
+  { id:'user', pri:0, label:'You (browser)', tier:'client', pos:[0,35,0], size:[17,5,9], shape:'box',
+    plain:'A person asks an investment question in plain English - "which New England airports are the strongest candidates for terminal expansion?"',
+    tech:'Any modern browser. The landing page is public; the chat itself sits behind sign-in so a reviewer sees value before authenticating.',
+    adr:'ADR-003 #3 (auth surface)' },
+
+  /* --- edge / UI -------------------------------------------------------- */
+  { id:'ui', pri:0, label:'Next.js chat UI', sub:'apps/web', tier:'edge', pos:[0,22,0], size:[26,5.5,11], shape:'box', status:'local', badgeText:'BUILT - DEPLOY PLANNED',
+    plain:'The chat screen. It takes the question, streams the answer back token by token, and shows the numbers, tables and assumptions the agent used.',
+    tech:'Next.js 15 App Router + Tailwind, TypeScript strict, in <code>apps/web</code>. Landing page is public and carries the four exam questions as click-to-ask cards; <code>/chat</code> renders the SSE token stream with GFM tables, an assumptions footnote and a local thread sidebar. Built and running locally - the Vercel project and the airport.guydvorkin.com CNAME are Tier 2 and not up yet.',
+    adr:'ADR-002 (Vercel role; Cloudflare deliberately not in front)' },
+
+  { id:'clerk', pri:1, label:'Clerk + Turnstile', sub:'Google / magic link', tier:'cross', pos:[-50,22,-34], size:[19,5,9], shape:'box', planned:true,
+    plain:'Sign-in without passwords, plus a bot check so the public demo cannot be scraped or run up an LLM bill.',
+    tech:'Clerk handles Google one-click and email magic link; Cloudflare Turnstile is enabled through Clerk. Backend side is a JWT dependency - present as a Tier 2 stub in <code>services/agent/auth.py</code>, <code>clerk_auth_enabled=False</code>.',
+    adr:'ADR-003 #3, ADR-002 (Turnstile via Clerk)' },
+
+  /* --- runtime ---------------------------------------------------------- */
+  { id:'api', pri:0, label:'FastAPI  POST /chat', sub:'SSE stream', tier:'runtime', pos:[0,13,0], size:[22,5,10], shape:'box',
+    plain:'The front door of the agent service. It accepts a question, runs the agent, and streams the answer out as it is generated.',
+    tech:'FastAPI app in <code>services/agent/main.py</code>. Endpoints: <code>GET /health</code>, <code>GET /</code>, <code>POST /chat</code>. On boot it builds the repository (Postgres when DATABASE_URL is set, fixtures otherwise), the checkpointer, and compiles the graph once.',
+    adr:'ADR-003 #1 (agent runtime)' },
+
+  { id:'agent', pri:0, label:'agent node', tier:'runtime', pos:[-13,4,0], size:[15,6,11], shape:'box',
+    plain:'The thinking step. It looks at the conversation so far and decides one of two things: call a tool, or write the final answer.',
+    tech:'One <code>ainvoke</code> per turn against the tool-bound model. Past <code>max_tool_iterations</code> (8) the model is called <em>without</em> tools plus a forced-answer nudge, so a turn always ends in prose rather than looping.',
+    adr:'ADR-003 #1, services/agent/graph.py' },
+
+  { id:'tools', pri:0, label:'tools node', tier:'runtime', pos:[13,4,0], size:[15,6,11], shape:'box',
+    plain:'The doing step. It runs whichever tools the model asked for and hands the results back.',
+    tech:'Hand-written rather than the prebuilt node, for one reason: it lifts each tool\'s <code>assumptions</code> artifact into typed graph state, so an answer\'s assumption set is structured data instead of prose to re-parse. Calls run concurrently via <code>asyncio.gather</code>; a raised tool becomes an error ToolMessage, never a 500.',
+    adr:'ADR-003 #1, services/agent/graph.py docstring' },
+
+  { id:'edge_cond', pri:0, label:'conditional edge', sub:'route(): tool_calls ? tools : END', tier:'runtime', pos:[0,-2,0], size:[3.2,3.2,3.2], shape:'oct',
+    plain:'The fork in the road. If the model asked for data, go run the tools. If it just wrote an answer, stop.',
+    tech:'<code>graph.add_conditional_edges("agent", route, {"tools": "tools", END: END})</code> with the return edge <code>tools -&gt; agent</code>. Two nodes, one conditional edge - an explicit state machine, testable node by node and extendable to supervisor + specialists without a rewrite.',
+    adr:'ADR-003 #1 (LangGraph StateGraph)' },
+
+  { id:'t_rank', pri:2,  label:'rank_airports',        tier:'runtime', pos:[30,-8,-40], size:[13,3.2,6.4], shape:'chip',
+    plain:'Ranks airports by investment opportunity, optionally filtered to a region or a set of states.',
+    tech:'Reads <code>v_opportunity_score</code>, joins <code>airports</code> for identity, and resolves a region name through the <code>regions</code> lookup - so "New England" becomes CT/ME/MA/NH/RI/VT in SQL, not in the prompt.',
+    adr:'ADR-001 (scoring inputs), docs/design.md (weights)' },
+  { id:'t_cmp', pri:2,   label:'compare_airports',     tier:'runtime', pos:[30,-8,-20], size:[13,3.2,6.4], shape:'chip', stagger:true,
+    plain:'Puts two airports side by side on traffic and congestion, each with its own numbers.',
+    tech:'Pulls <code>v_airport_metrics</code> and <code>v_congestion</code> for both codes in one payload, so the model never has to infer one side from the other.',
+    adr:'ADR-001 (BTS on-time as the congestion signal)' },
+  { id:'t_met', pri:2,   label:'airport_metrics',      tier:'runtime', pos:[30,-8,0],   size:[13,3.2,6.4], shape:'chip',
+    plain:'Traffic history for one airport: passengers, seats, departures, load factor, long-haul share, year-over-year growth.',
+    tech:'Straight read of <code>v_airport_metrics</code> for the last N years. NUMERIC is coerced to real numbers before it reaches the model - a passenger count arriving as the string "3180000.00" is a number the model would reformat, and reformatting is where invented digits creep in.',
+    adr:'ADR-001 (BTS T-100 as the demand foundation)' },
+  { id:'t_unmet', pri:2, label:'unmet_demand_estimate',tier:'runtime', pos:[30,-8,20],  size:[13,3.2,6.4], shape:'chip', stagger:true,
+    plain:'Estimates how much passenger demand an airport is not currently serving, and shows the three drivers behind the estimate.',
+    tech:'Reads <code>v_unmet_demand_est</code> plus metrics and congestion for context. Always returns <code>label: "ESTIMATE"</code> and an assumption line - no public source reports unmet demand directly.',
+    adr:'ADR-001 mitigation #3 (estimated, not observed)' },
+  { id:'t_res', pri:2,   label:'resolve_airport',      tier:'runtime', pos:[30,-8,40],  size:[13,3.2,6.4], shape:'chip',
+    plain:'Turns a place name into an airport code - "Santa Ana" becomes SNA - before any other tool runs.',
+    tech:'Fuzzy match over the <code>airports</code> table with exact IATA/ICAO hits ranked first. Other tools call it internally via <code>_coerce_iata</code>, so the model can pass a city name anywhere a code is expected.',
+    adr:'ADR-001 (OurAirports / FAA as the identity source)' },
+
+  { id:'langfuse', pri:1, label:'Langfuse', sub:'LLM traces', tier:'cross', pos:[52,4,-30], size:[17,5,9], shape:'box', planned:true,
+    plain:'Records every model call - what went in, what came out, how long it took, what it cost - so a wrong answer can be traced instead of guessed at.',
+    tech:'Tier 2. The Langfuse project and keys exist; the callback slot in <code>services/agent/observability.py</code> is still a stub and emits nothing - the code logs a warning saying exactly that rather than pretending to trace.',
+    adr:'ADR-003 #5 (Langfuse tracing, Tier 2)' },
+
+  /* --- data plane ------------------------------------------------------- */
+  { id:'tbl_t100', pri:2,     label:'bts_t100',   sub:'segments', tier:'data', pos:[-42,-19,-36], size:[12,3.4,7], shape:'chip',
+    plain:'One row per origin-destination-carrier-month: how many passengers flew, how many seats were offered, how many flights ran.',
+    tech:'BTS T-100 Segment (All Carriers), domestic + international. Primary key (year, month, origin, dest, carrier); indexed on origin/year and dest/year. A round trip appears as two directional rows, so views count origin-side only to avoid double counting.',
+    adr:'ADR-001 (core source), ADR-001 appendix (verified URLs + row counts)' },
+  { id:'tbl_ontime', pri:2,   label:'bts_ontime', sub:'delays',   tier:'data', pos:[-42,-19,-12],  size:[12,3.4,7], stagger:true, shape:'chip',
+    plain:'How many arrivals each airport handled each month, how many were more than 15 minutes late, and the total late minutes.',
+    tech:'BTS on-time performance, pre-aggregated to airport/month at load time (the carrier dimension is summed away). <code>arr_delay_min</code> is total arrival delay minutes across all arrivals, not just the delayed ones.',
+    adr:'ADR-001 (congestion signal)' },
+  { id:'tbl_airports', pri:2, label:'airports',   sub:'identity', tier:'data', pos:[-42,-19,12],   size:[12,3.4,7], shape:'chip',
+    plain:'What each airport is and where: name, city, state, coordinates, runway count, longest runway.',
+    tech:'OurAirports reference plus FAA NASR metadata. Scope is US airports that have an IATA code AND <code>scheduled_service = yes</code> - the realistic commercial-passenger universe, not every airstrip.',
+    adr:'ADR-001 (airport identity source)' },
+  { id:'tbl_regions', pri:2,  label:'regions',    sub:'state -> region', tier:'data', pos:[-42,-19,36], size:[12,3.4,7], shape:'chip', stagger:true,
+    plain:'The lookup that makes "New England" mean something exact: CT, ME, MA, NH, RI, VT.',
+    tech:'US Census Bureau 9-way divisions - the standard vocabulary that natively contains a "New England" value, unlike the coarser 4-way split. Joined by value, no foreign key, since <code>airports.state</code> is not unique per row.',
+    adr:'ADR-001 (region vocabulary)' },
+
+  { id:'v_metrics', pri:1, label:'v_airport_metrics', tier:'data', pos:[-6,-19,12],   size:[16,3.6,7], shape:'chip',
+    plain:'Demand and capacity per airport per year: passengers, seats, load factor, long-haul share, and year-over-year growth.',
+    tech:'Aggregates <code>bts_t100</code> on the origin side only, so outbound legs are counted once. Every downstream score reads this view rather than the raw table.',
+    adr:'ADR-000 principle #2 (scoring is auditable SQL)' },
+  { id:'v_cong', pri:1,    label:'v_congestion',      tier:'data', pos:[-6,-19,-12],  size:[16,3.6,7], stagger:true, shape:'chip',
+    plain:'How delayed an airport is, per year: the share of arrivals over 15 minutes late and the average delay minutes per arrival.',
+    tech:'Reads <code>bts_ontime</code> and divides total delay minutes by arrival count - an average-per-arrival figure, not an average of the late ones.',
+    adr:'ADR-001 (trend vs snapshot: history is the signal, live status is not)' },
+  { id:'v_opp', pri:1,     label:'v_opportunity_score', tier:'data', pos:[-6,-19,-36], size:[16,3.6,7], shape:'chip',
+    plain:'The single 0-100 "where to look now" ranking score behind every airport recommendation.',
+    tech:'Weights .30 passenger growth / .25 load factor / .20 congestion / .15 flight growth / .10 infrastructure constraint. Each input is a 0-100 percentile rank within the population of airports above 100k annual passengers in the latest year, so tiny airports do not distort the scale. Latest year only - a current-state score, not a time series.',
+    adr:'ADR-000 principle #2, docs/design.md (weights + methodology)' },
+  { id:'v_unmet', pri:1,   label:'v_unmet_demand_est', sub:'ESTIMATE', tier:'data', pos:[-6,-19,36], size:[16,3.6,7], shape:'chip', stagger:true,
+    plain:'A modelled figure for demand an airport probably cannot serve today. Labelled an estimate everywhere it appears.',
+    tech:'<code>max(0, demand pressure - available capacity)</code> from three independently non-negative signals: load factor above a 0.80 comfort threshold, the passenger-versus-seat growth gap, and persistent delay. The calibration constants are stated judgment calls, not fitted to data.',
+    adr:'ADR-001 mitigation #3 (estimated, not observed)' },
+
+  { id:'ckpt', pri:1, label:'LangGraph checkpoints', sub:'AsyncPostgresSaver', tier:'data', pos:[-28,-29,0], size:[22,4.4,9], shape:'box',
+    plain:'The conversation memory. It is why a follow-up like "and how does that compare to Providence?" still knows what you were talking about.',
+    tech:'<code>AsyncPostgresSaver</code> over a psycopg pool, tables created by <code>saver.setup()</code> on boot. Crash-safe: state lives in Postgres, not in process memory. Falls back to <code>MemorySaver</code> when DATABASE_URL is absent, and says so in the logs.',
+    adr:'ADR-003 #1 (Postgres-checkpointed conversations)' },
+
+  { id:'qlog', pri:2, label:'queries log table', tier:'data', pos:[0,-29,0], size:[19,4.4,9], shape:'box', planned:true,
+    plain:'A record of every question asked, which tools ran, and how long it took - usage tracking that doubles as per-user history.',
+    tech:'Decided in ADR-003 #4, not yet in <code>db/schema.sql</code>. The current schema holds four tables: airports, regions, bts_t100, bts_ontime.',
+    adr:'ADR-003 #4 (usage tracking)' },
+
+  /* --- model gateway ---------------------------------------------------- */
+  { id:'openrouter', pri:0, label:'OpenRouter', sub:'LLM gateway', tier:'model', pos:[40,-20,30], size:[20,5.5,10], shape:'box',
+    plain:'The single door to every language model. One spend-capped key, and swapping models is a one-line config change rather than a code change.',
+    tech:'OpenAI-compatible API at <code>openrouter.ai/api/v1</code>, driven through <code>ChatOpenAI</code> with temperature 0, a 60s timeout and 2 retries. Provider routing is decoupled from agent code, so the model choice never leaks into the graph.',
+    adr:'ADR-003 #2 (OpenRouter as the gateway)' },
+  { id:'m_primary', pri:2, label:'anthropic/claude-sonnet-4.5', sub:'AGENT_MODEL', tier:'model', pos:[40,-26,30], size:[19,3.4,7], shape:'chip',
+    plain:'The model actually answering questions right now.',
+    tech:'Set as <code>AGENT_MODEL=anthropic/claude-sonnet-4.5</code> in <code>.env</code>. Pinned by environment, never hardcoded in the graph.',
+    adr:'ADR-003 #2 (model pinned via env var)' },
+  { id:'m_fallback', pri:2, label:'openai/gpt-4o-mini', sub:'fallback default', tier:'model', pos:[40,-31,30], size:[19,3.4,7], shape:'chip',
+    plain:'What the service runs on if nobody sets a model - a cheap, always-available default rather than a crash.',
+    tech:'<code>agent_model: str = "openai/gpt-4o-mini"</code> in <code>services/agent/settings.py</code>. This is a configuration default, not runtime failover: OpenRouter itself handles provider-level routing behind the chosen model.',
+    adr:'ADR-003 #2 (swapping models is config, not refactor)' },
+
+  /* --- sources + ingestion --------------------------------------------- */
+  { id:'ingest', pri:1, label:'ingestion scripts', sub:'snapshot-first', tier:'source', pos:[-22,-39,0], size:[22,5,10], shape:'box',
+    plain:'Pulls the public data once, saves it into the repo, and loads it into the database. The demo never depends on somebody else\'s API being up.',
+    tech:'<code>ingestion/build_airports.py</code>, <code>build_bts_t100.py</code>, <code>build_bts_ontime.py</code>, then <code>load.py</code> loads idempotently. Refreshing the data is re-running the script. Deliberately not an n8n workflow - a script beats a workflow runtime for a snapshot pipeline.',
+    adr:'ADR-001 mitigation #1, ADR-003 (n8n rejected)' },
+  { id:'src_t100', pri:2, label:'BTS T-100 segments', tier:'source', pos:[-46,-49,-34], size:[22,5,10], shape:'box',
+    plain:'The US government\'s own record of who flew where: passengers, seats, departures and distance for every route, every month.',
+    tech:'Bureau of Transportation Statistics, T-100 Segment (All Carriers). US-government public domain, safe for a public repository. This is the demand and capacity foundation the scoring rests on.',
+    adr:'ADR-001 (core source)' },
+  { id:'src_ontime', pri:2, label:'BTS on-time performance', tier:'source', pos:[-22,-49,0], size:[22,5,10], shape:'box',
+    plain:'The delay record - how often flights arrive late at each airport, and by how much.',
+    tech:'BTS on-time performance, aggregated to airport/month during load. Provides the congestion dimension of the score over multiple years rather than a single snapshot.',
+    adr:'ADR-001 (core source)' },
+  { id:'src_air', pri:2, label:'OurAirports / FAA NASR', tier:'source', pos:[4,-49,34], size:[22,5,10], shape:'box',
+    plain:'The reference list of airports - names, locations, states and runways.',
+    tech:'OurAirports reference data plus FAA airport/runway metadata. Commercial flight APIs were evaluated and rejected for the core: AviationStack alone caps the free tier at 100 requests a month under a personal-only licence.',
+    adr:'ADR-001 (source matrix + rejections)' }
+];
+
+const EDGES = [
+  ['user','ui'], ['ui','api'], ['ui','clerk'],
+  ['api','agent'],
+  ['agent','edge_cond'], ['edge_cond','tools'], ['tools','agent'],
+  ['tools','t_rank'], ['tools','t_cmp'], ['tools','t_met'], ['tools','t_unmet'], ['tools','t_res'],
+  ['agent','openrouter'], ['openrouter','m_primary'], ['openrouter','m_fallback'],
+  ['agent','ckpt'], ['agent','langfuse'], ['api','qlog'],
+
+  /* tool -> view / table reads (thin) */
+  ['t_rank','v_opp',1], ['t_rank','tbl_airports',1], ['t_rank','tbl_regions',1],
+  ['t_cmp','v_cong',1], ['t_cmp','v_metrics',1],
+  ['t_met','v_metrics',1],
+  ['t_unmet','v_unmet',1],
+  ['t_res','tbl_airports',1],
+
+  /* view -> its inputs (thin) */
+  ['v_metrics','tbl_t100',1],
+  ['v_cong','tbl_ontime',1],
+  ['v_opp','v_metrics',1], ['v_opp','v_cong',1], ['v_opp','tbl_airports',1],
+  ['v_unmet','v_metrics',1], ['v_unmet','v_cong',1],
+
+  /* ingestion */
+  ['src_t100','ingest'], ['src_ontime','ingest'], ['src_air','ingest'],
+  ['ingest','tbl_t100',1], ['ingest','tbl_ontime',1], ['ingest','tbl_airports',1], ['ingest','tbl_regions',1]
+];
+
+/* Tier planes: [label, y, halfWidth, halfDepth, tierKey] */
+const PLANES = [
+  ['Client',          28.6, 58, 46, 'client'],
+  ['Edge / UI',       18.6, 68, 56, 'edge'],
+  ['Agent runtime',   -9.6, 68, 56, 'runtime'],
+  ['Data + model',   -36.8, 68, 56, 'data'],
+  ['Sources',        -53.0, 68, 56, 'source']
+];
+
+/* Containers: [label, cx,cy,cz, w,h,d, tierKey, plannedNote] */
+const BOXES = [
+  ['GCP Cloud Run  -  agent service', 2, 4, 0, 84, 26, 100, 'runtime', 'deploy planned - runs locally today'],
+  ['Neon Postgres', -22, -24, 0, 66, 24, 88, 'data', null]
+];
+
+/* ==========================================================================
+   3. The animated request - exam question 1, hop by hop.
+   ========================================================================== */
+const Q1 = 'Which airports in New England are the strongest candidates for terminal expansion investment? Rank them and explain the ranking.';
+
+const STEPS = [
+  { from:'user', to:'ui', t:'The question is typed',
+    b:`"${Q1}" - plain English, no codes, no filters, no SQL.` },
+  { from:'ui', to:'api', t:'Browser to backend',
+    b:'The chat UI opens <code>POST /chat</code> and holds a Server-Sent Events stream, so the answer can arrive token by token instead of all at once.' },
+  { from:'api', to:'agent', t:'The graph starts',
+    b:'FastAPI hands the message into the compiled LangGraph. First edge is <code>START -&gt; agent</code>, carrying typed state: messages plus an assumptions list.' },
+  { from:'agent', to:'openrouter', t:'The agent asks the model what to do',
+    b:'One call to the tool-bound model over OpenRouter, temperature 0. The system prompt forbids doing arithmetic in the model - numbers must come from tools.' },
+  { from:'openrouter', to:'m_primary', t:'Routed to the pinned model',
+    b:'<code>AGENT_MODEL=anthropic/claude-sonnet-4.5</code>. Changing this one line changes the brain; nothing in the graph knows which model it is talking to.' },
+  { from:'m_primary', to:'agent', t:'The model returns a tool call, not prose',
+    b:'It does not attempt an answer. It asks for <code>rank_airports(region="new_england")</code> - the correct move, because the ranking has to come out of SQL.' },
+  { from:'agent', to:'edge_cond', t:'The fork evaluates',
+    b:'<code>route()</code> looks at the last message. It has <code>tool_calls</code>, so the graph goes to the tools node. With no tool calls it would go straight to END.' },
+  { from:'edge_cond', to:'tools', t:'Conditional edge fires: agent -> tools',
+    b:'This is the one conditional edge in the whole graph. Two nodes, one fork - an explicit state machine that can be tested node by node and drawn exactly as you see it.' },
+  { from:'tools', to:'t_rank', t:'The tools node dispatches',
+    b:'Requested tools run concurrently under <code>asyncio.gather</code>. Here that is a single call: <code>rank_airports</code>, region filter "new_england".' },
+  { from:'t_rank', to:'v_opp', t:'Read-only SQL against the scoring view',
+    b:'<code>SELECT ... FROM v_opportunity_score JOIN airports ...</code> with the region resolved through the <code>regions</code> lookup to CT/ME/MA/NH/RI/VT. The filter is SQL, not prompt text.' },
+  { from:'v_opp', to:'v_metrics', t:'The score composes the other views',
+    b:'.30 passenger growth / .25 load factor / .20 congestion / .15 flight growth / .10 infrastructure constraint - each a percentile rank inside the 100k-plus-passenger population. It reads <code>v_airport_metrics</code>, <code>v_congestion</code> and <code>airports</code>. Plain SQL any reviewer can re-run.' },
+  { from:'v_metrics', to:'tbl_t100', t:'Which read the snapshot tables',
+    b:'<code>v_airport_metrics</code> aggregates <code>bts_t100</code> on the origin side only; <code>v_congestion</code> reads <code>bts_ontime</code>. Public BTS data, snapshotted into the repo - no third-party endpoint sits in the request path.' },
+  { from:'tbl_t100', to:'tools', t:'Ranked rows come back',
+    b:'Boston (BOS) leads at 78.4, Providence (PVD) follows. Postgres NUMERIC is coerced to real numbers first - a count arriving as the string "3180000.00" is a number the model would reformat, and reformatting is where invented digits appear.' },
+  { from:'tools', to:'agent', t:'Results and assumptions enter graph state',
+    b:'Each tool returns content plus an <code>assumptions</code> artifact. The tools node lifts those into typed state, so the caveats are structured data rather than something to re-parse out of prose later.' },
+  { from:'agent', to:'openrouter', t:'Second model call: explain the ranking',
+    b:'Same edge <code>tools -&gt; agent</code>, second turn. Now the model has real rows and its job is narrow: explain what the numbers say, cite them, and carry the assumptions and data vintage through.' },
+  { from:'openrouter', to:'agent', t:'A grounded answer comes back',
+    b:'Ranked airports with their scores, the driver behind each rank, the assumptions attached, and the data vintage. Anything the data cannot support is stated as missing rather than estimated.' },
+  { from:'agent', to:'ckpt', t:'The thread is checkpointed',
+    b:'<code>AsyncPostgresSaver</code> writes the state to Neon. That is why the next message - "and how does Providence compare on congestion?" - still knows what "that" means.' },
+  { from:'ckpt', to:'agent', t:'Write acknowledged',
+    b:'The saver commits before the turn is allowed to end, so a crash mid-stream cannot leave a thread with half a history. State lives in Postgres, not in process memory.' },
+  { from:'agent', to:'api', t:'route() sees no tool calls: END',
+    b:'The last message is prose, so the graph terminates. The answer streams out of FastAPI over the SSE connection that has been open since the first hop.' },
+  { from:'api', to:'ui', t:'Tokens stream into the browser',
+    b:'Text appears as it is generated instead of after a long blank pause - the difference between a demo that feels alive and one that feels broken.' },
+  { from:'ui', to:'user', t:'Answer on screen. Loop restarts.',
+    b:'Numbers from SQL, reasoning from the model, assumptions and data vintage attached. Nothing in the ranking was invented by a language model.' }
+];
+
+/* ==========================================================================
+   4. Scene
+   ========================================================================== */
+const stage = document.getElementById('stage');
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x070a10);
+scene.fog = new THREE.Fog(0x070a10, 280, 660);
+
+const CAM_HOME = new THREE.Vector3(96, 32, 132);
+const CAM_TARGET = new THREE.Vector3(0, -8, 0);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 900);
+camera.position.copy(CAM_HOME);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.075;
+controls.target.copy(CAM_TARGET);
+controls.minDistance = 40;
+controls.maxDistance = 380;
+controls.autoRotateSpeed = 0.34;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+scene.add(new THREE.HemisphereLight(0x9fc3ff, 0x0a0f18, 0.72));
+const key = new THREE.DirectionalLight(0xffffff, 0.72); key.position.set(70, 110, 90); scene.add(key);
+const rim = new THREE.DirectionalLight(0x7aa2f7, 0.34); rim.position.set(-90, 30, -80); scene.add(rim);
+
+/* --- label sprites ------------------------------------------------------ */
+const DPR_TEXT = 3;
+function makeLabel (text, opts = {}) {
+  const size    = opts.size || 15;
+  const color   = opts.color || '#e6edf6';
+  const weight  = opts.weight || 620;
+  const bg      = opts.bg || null;
+  const padX    = opts.padX == null ? 6 : opts.padX;
+  const padY    = opts.padY == null ? 3 : opts.padY;
+  const letter  = opts.letterSpacing || 0;
+
+  const meas = document.createElement('canvas').getContext('2d');
+  const font = `${weight} ${size * DPR_TEXT}px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif`;
+  meas.font = font;
+  const w = Math.ceil(meas.measureText(text).width + letter * DPR_TEXT * text.length);
+
+  const cv = document.createElement('canvas');
+  cv.width  = w + padX * 2 * DPR_TEXT;
+  cv.height = size * DPR_TEXT + padY * 2 * DPR_TEXT;
+  const ctx = cv.getContext('2d');
+  ctx.font = font;
+  ctx.textBaseline = 'middle';
+
+  if (bg) {
+    const r = 6 * DPR_TEXT;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(0.5, 0.5, cv.width - 1, cv.height - 1, r);
+    else ctx.rect(0.5, 0.5, cv.width - 1, cv.height - 1);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    if (opts.border) { ctx.strokeStyle = opts.border; ctx.lineWidth = 1.5 * DPR_TEXT; ctx.stroke(); }
+  }
+  ctx.fillStyle = color;
+  if (letter) {
+    let x = padX * DPR_TEXT;
+    for (const ch of text) { ctx.fillText(ch, x, cv.height / 2); x += ctx.measureText(ch).width + letter * DPR_TEXT; }
+  } else {
+    ctx.fillText(text, padX * DPR_TEXT, cv.height / 2);
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+  // Labels ignore the depth buffer: the declutter pass already guarantees no
+  // two of them share screen space, so depth can only hurt here - it is what
+  // lets a box in front slice a label in half.
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    opacity: opts.opacity == null ? 1 : opts.opacity
+  });
+  const sp = new THREE.Sprite(mat);
+  const scale = (opts.scale || 1) * 0.165;
+  sp.scale.set(cv.width / DPR_TEXT * scale, cv.height / DPR_TEXT * scale, 1);
+  sp.renderOrder = 12;
+  sp.userData.isLabel = true;
+  return sp;
+}
+
+/* Labels are nudged toward the camera every frame so they never sink into the
+   geometry they belong to, and a screen-space declutter pass drops any label
+   that would land on top of a higher-priority one. Nothing ever renders as
+   two strings mashed together: it is either readable or it is not drawn. */
+const labels = [];
+function attachLabel (sprite, anchor, lift, opts = {}) {
+  sprite.userData.anchor = anchor.clone().add(new THREE.Vector3(0, lift, 0));
+  sprite.userData.priority = opts.priority == null ? 2 : opts.priority;
+  sprite.userData.owner = opts.owner || null;
+  scene.add(sprite);
+  labels.push(sprite);
+  return sprite;
+}
+
+/* --- geometry cache ----------------------------------------------------- */
+const GEO = {
+  box: new THREE.BoxGeometry(1, 1, 1),
+  oct: new THREE.OctahedronGeometry(1, 0),
+  sph: new THREE.SphereGeometry(1, 20, 14)
+};
+// One EdgesGeometry per shape, shared by every node that uses it.
+const EDGE_GEO = { box: new THREE.EdgesGeometry(GEO.box), oct: new THREE.EdgesGeometry(GEO.oct) };
+
+const nodeById = new Map();
+const pickables = [];
+const nodeGroup = new THREE.Group();
+scene.add(nodeGroup);
+
+function buildNode (n) {
+  const tier = TIERS[n.tier];
+  const col = new THREE.Color(tier.color);
+  const [w, h, d] = n.size;
+  const status = n.status || (n.planned ? 'planned' : 'live');
+  const planned = status === 'planned';   // faded + dashed treatment
+  const pending = status !== 'live';      // carries a badge either way
+
+  const g = new THREE.Group();
+  g.position.set(n.pos[0], n.pos[1], n.pos[2]);
+
+  let mesh;
+  if (n.shape === 'oct') {
+    mesh = new THREE.Mesh(GEO.oct, new THREE.MeshStandardMaterial({
+      color: col, emissive: col, emissiveIntensity: 0.55,
+      metalness: 0.1, roughness: 0.4, transparent: true, opacity: 0.95
+    }));
+    mesh.scale.setScalar(w);
+  } else {
+    mesh = new THREE.Mesh(GEO.box, new THREE.MeshStandardMaterial({
+      color: col, emissive: col,
+      emissiveIntensity: planned ? 0.05 : 0.14,
+      metalness: 0.18, roughness: 0.56,
+      transparent: true, opacity: planned ? 0.20 : 0.80
+    }));
+    mesh.scale.set(w, h, d);
+  }
+  g.add(mesh);
+
+  // crisp outline; dashed when the thing is not deployed yet
+  const eg = n.shape === 'oct' ? EDGE_GEO.oct : EDGE_GEO.box;
+  const outline = planned
+    ? new THREE.LineSegments(eg, new THREE.LineDashedMaterial({
+        color: col, transparent: true, opacity: 0.62, dashSize: 0.06, gapSize: 0.045 }))
+    : new THREE.LineSegments(eg, new THREE.LineBasicMaterial({
+        color: col, transparent: true, opacity: 0.9 }));
+  outline.scale.copy(mesh.scale);
+  if (planned) outline.computeLineDistances();
+  g.add(outline);
+
+  nodeGroup.add(g);
+
+  mesh.userData.nodeId = n.id;
+  pickables.push(mesh);
+
+  // Labels. Neighbouring chips in a row alternate height (`stagger`) so their
+  // billboards cannot overlap from any orbit angle.
+  const chip = n.shape === 'chip';
+  const lift = (n.shape === 'oct' ? w : h / 2) + 3.0 + (n.stagger ? 6.4 : 0);
+  const plate = 'rgba(8,12,19,0.94)';
+  const main = attachLabel(
+    makeLabel(n.label, {
+      size: chip ? 13 : 15.5, color:'#eef4fb', scale: chip ? 0.86 : 1,
+      bg: plate, border: `rgba(${(col.r*255)|0},${(col.g*255)|0},${(col.b*255)|0},0.42)`,
+      padX: 8, padY: 4.5
+    }),
+    g.position, lift, { priority: n.pri != null ? n.pri : (chip ? 2 : 1), owner: n.id }
+  );
+  // Sub-text lives on the big nodes only; chip detail belongs in the info card.
+  let subL = null;
+  if (n.sub && !chip) {
+    subL = attachLabel(
+      makeLabel(n.sub, {
+        size: 11, color: hex(tier.color), weight: 580, scale: 0.88,
+        bg: plate, border: `rgba(${(col.r*255)|0},${(col.g*255)|0},${(col.b*255)|0},0.30)`,
+        padX: 8, padY: 3.5
+      }),
+      g.position, lift
+    );
+    subL.userData.anchor.y = main.userData.anchor.y + 3.7;
+    subL.userData.priority = 3; subL.userData.owner = n.id;
+  }
+  // A leader line keeps a staggered label tied to its own node.
+  if (n.stagger) {
+    const leader = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, h / 2, 0), new THREE.Vector3(0, lift - 1.2, 0)
+      ]),
+      new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.30 })
+    );
+    g.add(leader);
+  }
+  let badge = null;
+  if (pending) {
+    badge = attachLabel(
+      makeLabel(n.badgeText || 'PLANNED', {
+        size: 9.5, weight: 700, letterSpacing: 1.1, color:'#9fb0c4',
+        bg:'rgba(20,27,38,0.88)', border:'rgba(148,163,184,0.42)', scale: 0.8
+      }),
+      g.position, lift, { priority: 1, owner: n.id }
+    );
+    // sits above the name (and its sub-line) so it is never mistaken for a neighbour
+    badge.userData.anchor.y = (subL || main).userData.anchor.y + 3.6;
+  }
+
+  const rec = { def:n, group:g, mesh, outline, label:main, subLabel:subL, badge,
+                color:col, planned, baseEmissive: mesh.material.emissiveIntensity,
+                baseOpacity: mesh.material.opacity, pulse:0 };
+  nodeById.set(n.id, rec);
+  return rec;
+}
+NODES.forEach(buildNode);
+
+/* --- tier planes -------------------------------------------------------- */
+PLANES.forEach(([name, y, hw, hd, tk]) => {
+  const col = new THREE.Color(TIERS[tk].color);
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(hw * 2, hd * 2),
+    new THREE.MeshBasicMaterial({ color: col, transparent:true, opacity:0.030, side:THREE.DoubleSide, depthWrite:false })
+  );
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.set(-2, y, 0);
+  scene.add(plane);
+
+  const border = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.PlaneGeometry(hw * 2, hd * 2)),
+    new THREE.LineBasicMaterial({ color: col, transparent:true, opacity:0.16 })
+  );
+  border.rotation.x = -Math.PI / 2;
+  border.position.copy(plane.position);
+  scene.add(border);
+
+  const tag = makeLabel(name.toUpperCase(), {
+    size: 12, weight: 700, letterSpacing: 2.2, color: hex(TIERS[tk].color), opacity: 0.62, scale: 0.9
+  });
+  attachLabel(tag, new THREE.Vector3(-2 - hw - 12, y, hd - 6), 2.5, { priority: 1 });
+});
+
+/* --- containers --------------------------------------------------------- */
+BOXES.forEach(([name, cx, cy, cz, w, h, d, tk, note]) => {
+  const col = new THREE.Color(TIERS[tk].color);
+  const shell = new THREE.Mesh(GEO.box, new THREE.MeshBasicMaterial({
+    color: col, transparent:true, opacity:0.022, depthWrite:false
+  }));
+  shell.scale.set(w, h, d); shell.position.set(cx, cy, cz);
+  scene.add(shell);
+
+  const frame = new THREE.LineSegments(
+    new THREE.EdgesGeometry(GEO.box),
+    new THREE.LineDashedMaterial({ color: col, transparent:true, opacity:0.34, dashSize:0.05, gapSize:0.035 })
+  );
+  frame.scale.copy(shell.scale); frame.position.copy(shell.position);
+  frame.computeLineDistances();
+  scene.add(frame);
+
+  const tag = makeLabel(name, { size: 14, weight: 680, color: hex(TIERS[tk].color), opacity: 0.95,
+    bg: "rgba(8,12,19,0.94)", border: "rgba(148,163,184,0.30)", padX: 9, padY: 4.5 });
+  attachLabel(tag, new THREE.Vector3(cx - w / 2 + 20, cy + h / 2, cz + d / 2 - 6), 4.0, { priority: 0 });
+  if (note) {
+    const sub = makeLabel(note, {
+      size: 10, weight: 620, letterSpacing: 0.8, color:'#9fb0c4',
+      bg:'rgba(20,27,38,0.88)', border:'rgba(148,163,184,0.42)', scale: 0.86
+    });
+    attachLabel(sub, new THREE.Vector3(cx - w / 2 + 20, cy + h / 2, cz + d / 2 - 6), 0.4, { priority: 1 });
+  }
+});
+
+/* --- edges -------------------------------------------------------------- */
+const UP = new THREE.Vector3(0, 1, 0);
+const edgeIndex = new Map();      // "a|b" -> record
+const edgeRecords = [];
+
+function edgeCurve (a, b) {
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const len = dir.length();
+  let off = new THREE.Vector3().crossVectors(dir, UP);
+  if (off.lengthSq() < 1e-5) off.set(0, 0, 1);
+  off.normalize().multiplyScalar(Math.min(len * 0.10, 5.5));
+  const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5).add(off);
+  return new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
+}
+
+EDGES.forEach(([aId, bId, thin]) => {
+  const A = nodeById.get(aId), B = nodeById.get(bId);
+  if (!A || !B) return;
+  const planned = A.planned || B.planned;
+  const curve = edgeCurve(A.group.position, B.group.position);
+  const col = new THREE.Color(TIERS[A.def.tier].color).lerp(new THREE.Color(TIERS[B.def.tier].color), 0.5);
+
+  let obj;
+  if (planned) {
+    const pts = curve.getPoints(48);
+    obj = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineDashedMaterial({ color: col, transparent:true, opacity:0.36, dashSize:1.5, gapSize:1.2 })
+    );
+    obj.computeLineDistances();
+  } else {
+    obj = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, 26, thin ? 0.10 : 0.20, 6, false),
+      new THREE.MeshBasicMaterial({ color: col, transparent:true, opacity: thin ? 0.24 : 0.46 })
+    );
+  }
+  scene.add(obj);
+
+  const rec = { obj, curve, base: obj.material.opacity, pulse: 0, planned };
+  edgeRecords.push(rec);
+  edgeIndex.set(aId + '|' + bId, rec);
+  edgeIndex.set(bId + '|' + aId, rec);
+});
+
+/* conditional-edge caption in-scene */
+attachLabel(
+  makeLabel('route(): tool_calls ? tools : END', {
+    size: 11, weight: 600, color:'#f6d17a', opacity:0.92, scale:0.88,
+    bg:'rgba(20,17,10,0.80)', border:'rgba(251,191,36,0.30)'
+  }),
+  new THREE.Vector3(0, -0.5, 0), -4.4
+);
+
+/* --- the travelling request -------------------------------------------- */
+function glowTexture () {
+  const s = 128, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d').createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+  g.addColorStop(0.00, 'rgba(255,255,255,1)');
+  g.addColorStop(0.22, 'rgba(190,220,255,0.75)');
+  g.addColorStop(0.55, 'rgba(122,162,247,0.22)');
+  g.addColorStop(1.00, 'rgba(122,162,247,0)');
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const GLOW_TEX = glowTexture();
+
+const packet = new THREE.Group();
+const core = new THREE.Mesh(GEO.sph, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+core.scale.setScalar(0.72);
+packet.add(core);
+const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: GLOW_TEX, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false
+}));
+halo.scale.setScalar(11);
+packet.add(halo);
+packet.visible = false;
+packet.renderOrder = 20;
+scene.add(packet);
+
+const TRAIL_N = 16;
+const trail = [];
+for (let i = 0; i < TRAIL_N; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: GLOW_TEX, blending: THREE.AdditiveBlending, transparent: true,
+    depthWrite: false, depthTest: false, opacity: 0
+  }));
+  s.scale.setScalar(6.5 * (1 - i / TRAIL_N) + 1.2);
+  s.visible = false;
+  scene.add(s);
+  trail.push(s);
+}
+const trailBuf = [];
+
+/* ==========================================================================
+   5. UI wiring
+   ========================================================================== */
+const legendRows = document.getElementById('legendRows');
+Object.values(TIERS).forEach(t => {
+  const row = document.createElement('div');
+  row.className = 'lg';
+  row.innerHTML = `<span class="sw" style="background:${hex(t.color)};color:${hex(t.color)}"></span><span>${t.name}</span>`;
+  legendRows.appendChild(row);
+});
+
+const infoEl   = document.getElementById('info');
+const capEl    = document.getElementById('caption');
+const capStep  = document.getElementById('capStep');
+const capTitle = document.getElementById('capTitle');
+const capBody  = document.getElementById('capBody');
+const capFill  = document.getElementById('capFill');
+const hintEl   = document.getElementById('hint');
+
+function showInfo (id) {
+  const rec = nodeById.get(id);
+  if (!rec) return;
+  const n = rec.def;
+  document.getElementById('infoDot').style.background = hex(TIERS[n.tier].color);
+  document.getElementById('infoDot').style.color = hex(TIERS[n.tier].color);
+  document.getElementById('infoTitle').textContent = n.label;
+  document.getElementById('infoTier').textContent = TIERS[n.tier].name + (n.sub ? '  ·  ' + n.sub : '');
+  document.getElementById('infoPlain').innerHTML = n.plain;
+  document.getElementById('infoTech').innerHTML = n.tech;
+  document.getElementById('infoAdr').textContent = n.adr;
+  const badge = document.getElementById('infoBadge');
+  const st = n.status || (n.planned ? 'planned' : 'live');
+  badge.textContent = st === 'live' ? 'Running today'
+    : st === 'local' ? 'Built - runs locally, not deployed'
+    : 'Planned - not deployed';
+  badge.className = 'badge' + (st === 'live' ? ' live' : '');
+  infoEl.classList.add('show');
+  hintEl.classList.add('hide');
+  selectNode(id);
+}
+document.getElementById('infoClose').addEventListener('click', () => {
+  infoEl.classList.remove('show');
+  selectNode(null);
+});
+
+let selectedId = null;
+function selectNode (id) {
+  if (selectedId && nodeById.get(selectedId)) nodeById.get(selectedId).selected = false;
+  selectedId = id;
+  if (id && nodeById.get(id)) nodeById.get(id).selected = true;
+}
+
+/* --- picking ------------------------------------------------------------ */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let hoveredId = null;
+
+function pick (ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+  ndc.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(pickables, false)[0];
+  return hit ? hit.object.userData.nodeId : null;
+}
+
+let downXY = null;
+renderer.domElement.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downXY) return;
+  const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
+  downXY = null;
+  if (moved > 5) return;                    // it was a drag, not a click
+  const id = pick(e);
+  if (id) showInfo(id);
+  else { infoEl.classList.remove('show'); selectNode(null); }
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (downXY) return;
+  const id = pick(e);
+  if (id !== hoveredId) {
+    hoveredId = id;
+    renderer.domElement.style.cursor = id ? 'pointer' : 'default';
+  }
+});
+
+/* --- buttons ------------------------------------------------------------ */
+const btnRun = document.getElementById('btnRun');
+const btnOrbit = document.getElementById('btnOrbit');
+const btnReset = document.getElementById('btnReset');
+
+let running = false, stepIdx = 0, stepT = 0, stepDur = 1;
+let activeFrom = null, activeTo = null;   // the hop in flight - its labels never get decluttered away
+
+function startRun () {
+  running = true; stepIdx = 0; stepT = 0;
+  packet.visible = true;
+  trailBuf.length = 0;
+  capEl.classList.add('show');
+  btnRun.classList.add('on');
+  btnRun.textContent = 'Stop';
+  hintEl.classList.add('hide');
+  beginStep();
+}
+function stopRun () {
+  running = false;
+  activeFrom = activeTo = null;
+  packet.visible = false;
+  trail.forEach(s => { s.visible = false; });
+  capEl.classList.remove('show');
+  btnRun.classList.remove('on');
+  btnRun.textContent = 'Run a query';
+  edgeRecords.forEach(e => { e.pulse = 0; e.obj.material.opacity = e.base; });
+  nodeById.forEach(n => { n.pulse = 0; });
+}
+btnRun.addEventListener('click', () => running ? stopRun() : startRun());
+
+btnOrbit.addEventListener('click', () => {
+  controls.autoRotate = !controls.autoRotate;
+  btnOrbit.classList.toggle('on', controls.autoRotate);
+});
+btnReset.addEventListener('click', () => {
+  controls.autoRotate = false;
+  btnOrbit.classList.remove('on');
+  camera.position.copy(CAM_HOME);
+  controls.target.copy(CAM_TARGET);
+  controls.update();
+  fitCamera();
+});
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { infoEl.classList.remove('show'); selectNode(null); }
+  if (e.key === ' ' && e.target === document.body) { e.preventDefault(); running ? stopRun() : startRun(); }
+});
+
+/* --- step machinery ----------------------------------------------------- */
+let curCurve = null;
+
+function beginStep () {
+  const s = STEPS[stepIdx];
+  const A = nodeById.get(s.from), B = nodeById.get(s.to);
+  activeFrom = s.from; activeTo = s.to;
+  curCurve = edgeCurve(A.group.position, B.group.position);
+  const len = A.group.position.distanceTo(B.group.position);
+  stepDur = Math.min(2.2, Math.max(1.15, 0.85 + len * 0.014));
+  stepT = 0;
+
+  capStep.textContent = String(stepIdx + 1).padStart(2, '0') + ' / ' + STEPS.length;
+  capTitle.textContent = s.t;
+  capBody.innerHTML = s.b;
+
+  A.pulse = 1;
+  const e = edgeIndex.get(s.from + '|' + s.to);
+  if (e) e.pulse = 1;
+}
+
+function advance (dt) {
+  stepT += dt;
+  const s = STEPS[stepIdx];
+  const p = Math.min(1, stepT / stepDur);
+  capFill.style.width = (((stepIdx + p) / STEPS.length) * 100).toFixed(1) + '%';
+
+  const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  curCurve.getPoint(ease, packet.position);
+
+  trailBuf.unshift(packet.position.clone());
+  if (trailBuf.length > TRAIL_N) trailBuf.pop();
+  for (let i = 0; i < TRAIL_N; i++) {
+    const t = trail[i];
+    if (trailBuf[i]) {
+      t.visible = true;
+      t.position.copy(trailBuf[i]);
+      t.material.opacity = 0.42 * (1 - i / TRAIL_N);
+    } else t.visible = false;
+  }
+
+  if (p >= 1) {
+    nodeById.get(s.to).pulse = 1;
+    stepIdx = (stepIdx + 1) % STEPS.length;
+    beginStep();
+  }
+}
+
+/* ==========================================================================
+   6. Loop
+   ========================================================================== */
+const clock = new THREE.Clock();
+const camDir = new THREE.Vector3();
+
+/* --- screen-space declutter --------------------------------------------
+   Project every label to screen space, walk them nearest-and-most-important
+   first, and hide any whose box lands on one already placed. Overlap is
+   resolved by dropping a label, never by drawing two on top of each other.
+   Orbiting or zooming in frees the space and the dropped labels return.      */
+const _proj = new THREE.Vector3();
+const _slots = [];
+const _order = [];
+
+function declutter () {
+  const tanHalf = Math.tan(camera.fov * Math.PI / 360);
+  const aspect = camera.aspect;
+  _slots.length = 0;
+  _order.length = 0;
+
+  for (let i = 0; i < labels.length; i++) {
+    const l = labels[i];
+    _proj.copy(l.position).project(camera);
+    if (_proj.z > 1 || _proj.x < -1.5 || _proj.x > 1.5 || _proj.y < -1.5 || _proj.y > 1.5) {
+      l.visible = false;
+      continue;
+    }
+    const dist = camera.position.distanceTo(l.position);
+    const h = l.scale.y / (2 * dist * tanHalf);
+    const w = l.scale.x / (2 * dist * tanHalf * aspect);
+    const cx = _proj.x * 0.5 + 0.5;
+    const cy = _proj.y * 0.5 + 0.5;
+
+    // The active hop and the selected node always win their space.
+    let pr = l.userData.priority;
+    const own = l.userData.owner;
+    if (own && (own === selectedId || own === activeFrom || own === activeTo)) pr = -1;
+
+    _order.push({ l, pr, dist, x0: cx - w / 2, x1: cx + w / 2, y0: cy - h / 2, y1: cy + h / 2 });
+  }
+
+  _order.sort((a, b) => (a.pr - b.pr) || (a.dist - b.dist));
+
+  const PAD = 0.002;
+  for (let i = 0; i < _order.length; i++) {
+    const c = _order[i];
+    let blocked = false;
+    for (let j = 0; j < _slots.length; j++) {
+      const s = _slots[j];
+      if (c.x0 < s.x1 + PAD && c.x1 > s.x0 - PAD && c.y0 < s.y1 + PAD && c.y1 > s.y0 - PAD) {
+        blocked = true; break;
+      }
+    }
+    c.l.visible = !blocked;
+    if (!blocked) _slots.push(c);
+  }
+}
+
+function tick () {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const now = performance.now() * 0.001;
+
+  if (running) advance(dt);
+
+  // node pulse decay + selection ring
+  nodeById.forEach(rec => {
+    if (rec.pulse > 0) rec.pulse = Math.max(0, rec.pulse - dt * 1.35);
+    const sel = rec.selected ? 0.55 + Math.sin(now * 3.4) * 0.18 : 0;
+    const boost = Math.max(rec.pulse, sel);
+    rec.mesh.material.emissiveIntensity = rec.baseEmissive + boost * 1.25;
+    rec.mesh.material.opacity = Math.min(1, rec.baseOpacity + boost * 0.35);
+    rec.outline.material.opacity = (rec.planned ? 0.62 : 0.9) + boost * 0.1;
+    const sc = 1 + boost * 0.07;
+    rec.group.scale.setScalar(sc);
+  });
+
+  // edge pulse decay
+  for (let i = 0; i < edgeRecords.length; i++) {
+    const e = edgeRecords[i];
+    if (e.pulse > 0) {
+      e.pulse = Math.max(0, e.pulse - dt * 0.85);
+      e.obj.material.opacity = e.base + e.pulse * 0.5;
+    }
+  }
+
+  if (running) {
+    const s = 1 + Math.sin(now * 9) * 0.12;
+    halo.scale.setScalar(11 * s);
+    core.scale.setScalar(0.72 * s);
+  }
+
+  // pull labels a touch toward the camera so nothing hides them
+  for (let i = 0; i < labels.length; i++) {
+    const l = labels[i];
+    camDir.copy(camera.position).sub(l.userData.anchor).normalize().multiplyScalar(3.2);
+    l.position.copy(l.userData.anchor).add(camDir);
+  }
+  declutter();
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* Frames the whole system for the current viewport and camera direction.
+   Called at boot, on Reset view, and on resize - which is what makes the same
+   file legible at 1366x768 and at 4K without hand-tuned camera constants. */
+const FIT_POINTS = [];
+NODES.forEach(n => {
+  const [x, y, z] = n.pos, [w, h, d] = n.size;
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    FIT_POINTS.push(new THREE.Vector3(x + sx * w / 2, y + sy * h / 2 + (sy > 0 ? 7 : 0), z + sz * d / 2));
+  }
+});
+
+const _fRight = new THREE.Vector3(), _fUp = new THREE.Vector3(), _fDir = new THREE.Vector3(), _fV = new THREE.Vector3();
+function fitCamera (margin = 1.06) {
+  _fDir.subVectors(camera.position, controls.target).normalize();
+  _fRight.crossVectors(_fDir, new THREE.Vector3(0, 1, 0)).normalize();
+  _fUp.crossVectors(_fRight, _fDir).normalize();
+
+  // Exact per-point requirement. Reserving the scene's full depth on top of
+  // its full height (the naive version) pushes the camera much too far back.
+  const tanHalf = Math.tan(camera.fov * Math.PI / 360);
+  let need = 40;
+  for (let i = 0; i < FIT_POINTS.length; i++) {
+    _fV.subVectors(FIT_POINTS[i], controls.target);
+    const depth = _fV.dot(_fDir);                       // + is toward the camera
+    const r = Math.abs(_fV.dot(_fRight));
+    const u = Math.abs(_fV.dot(_fUp));
+    const d = depth + margin * Math.max(u / tanHalf, r / (tanHalf * camera.aspect));
+    if (d > need) need = d;
+  }
+  camera.position.copy(controls.target).addScaledVector(_fDir, need);
+  controls.update();
+}
+
+function resize () {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  fitCamera();
+}
+window.addEventListener('resize', resize);
+
+window.__booted = true;
+fitCamera();
+tick();
+</script>
+</body>
+</html>
