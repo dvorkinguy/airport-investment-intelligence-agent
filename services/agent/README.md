@@ -6,6 +6,8 @@ around what came back.
 
 ## Run it
 
+From the repo root (the `.env` template lives there, not in this folder):
+
 ```bash
 uv sync --extra dev
 cp .env.example .env          # fill OPENROUTER_API_KEY (+ DATABASE_URL if you have one)
@@ -13,9 +15,12 @@ uv run python -m agent        # http://127.0.0.1:8000
 ```
 
 Use `python -m agent`, not `uvicorn agent.main:app`. On Windows the event loop has
-to be selected before uvicorn creates one - psycopg's async driver refuses the
-default `ProactorEventLoop` and every database call times out with a pool error
-that never names the cause (`agent.configure_event_loop`). No-op on Linux.
+to be selected before uvicorn creates one - psycopg's async pool refuses the
+default `ProactorEventLoop` and **startup aborts** after ~15s with
+`psycopg_pool.PoolTimeout: pool initialization incomplete` and "Application
+startup failed. Exiting.", with a psycopg WARNING naming `ProactorEventLoop`
+just above it. `python -m agent` selects the right loop first
+(`agent.configure_event_loop`); no-op on Linux.
 
 With no `DATABASE_URL` the service starts on the JSON fixture backend, so the
 whole stack is runnable before the database exists. `/health` always says which
@@ -35,7 +40,7 @@ europe-west3). Deploy instructions are at the bottom of this file.
 
 | Route | Notes |
 |---|---|
-| `GET /health` | 200 healthy / 503 degraded. Reports data backend, model, data vintage, whether tracing and the query log are live, and which pieces are still stubs. |
+| `GET /health` | 200 healthy / 503 degraded. Reports data backend, model, data vintage, whether tracing and the query log are live, and which pieces are still stubs. After ~5 min idle the first probe can return 503 once while Neon wakes a suspended compute; the next call recovers. |
 | `POST /chat` | `{message, thread_id?, stream?}`. Same `thread_id` continues a conversation. |
 | `GET /docs` | Generated OpenAPI. |
 
@@ -147,6 +152,7 @@ is a good investment.
 | `REPO_BACKEND` | `auto` | Force `postgres` or `fixture`. |
 | `MAX_TOOL_ITERATIONS` | `8` | Past the cap the model answers without tools, so a turn always ends in prose. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Whole-request ceiling. |
+| `CORS_ORIGINS` | `["http://localhost:3000"]` | JSON list. A web UI on any other port or domain is blocked by the browser preflight and shows only "backend not connected" - add its origin here. |
 | `LOG_JSON` | `true` | `false` for readable local logs. |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | - | Present -> tracing on. |
 | `LANGFUSE_HOST` / `LANGFUSE_BASE_URL` | cloud | `BASE_URL` is the v4 name and wins if both are set. |
@@ -255,10 +261,7 @@ context, so neither can reach an image layer.
 ## Stubbed on purpose
 
 Nothing. Clerk verification was the last stub and landed 2026-08-11; `/health`
-reports `stubs: {}`.
-
-One cross-lane gap remains, in a file this lane does not own:
-`apps/web/src/lib/api.ts` still sends `X-User-Id` / `X-User-Email` and no
-`Authorization` header. The backend ignores those headers, so a signed-in user
-currently logs as `anonymous` until the web lane attaches the Clerk session
-token instead.
+reports `stubs: {}`. The web client attaches the Clerk session token as
+`Authorization: Bearer` when signed in (`apps/web/src/lib/api.ts`), so a
+signed-in user's verified `sub` flows through to the query log and traces;
+spoofable `X-User-*` headers are gone from both sides.

@@ -12,6 +12,11 @@ npm run dev                    # http://localhost:3000
 
 The agent backend (`services/agent`) must be running separately - see its README.
 
+If the UI runs on any port other than 3000 (e.g. 3000 was taken), add that origin
+to the backend's `CORS_ORIGINS` (Configuration table in `services/agent/README.md`)
+- otherwise the browser blocks every request and the UI only shows "backend not
+connected".
+
 ## Routes
 
 | Route | What it is |

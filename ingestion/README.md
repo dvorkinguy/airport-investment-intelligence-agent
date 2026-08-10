@@ -18,6 +18,8 @@ Full verification detail (URLs, row counts, filtering decisions, gotchas): see
 
 ## Run order
 
+From the repo root:
+
 ```
 uv run python ingestion/build_airports.py
 uv run --with requests python ingestion/build_bts_t100.py
@@ -27,8 +29,9 @@ uv run python ingestion/load.py
 
 Requires `DATABASE_URL` in `.env` at repo root (see `.env.example`).
 
-`build_bts_t100.py` needs the `requests` package - installed ad-hoc via `--with requests`, not
-added to the shared `pyproject.toml`. The other three scripts are stdlib-only.
+`build_bts_t100.py` imports `requests`, which `uv sync --extra dev` already installs
+transitively (via langfuse); the `--with requests` makes the command also work outside a
+synced environment. The other three scripts are stdlib-only.
 
 Raw downloads land in `data/raw/` (gitignored, several hundred MB); only the processed CSVs in
 `data/` are committed. All four scripts are idempotent - safe to re-run, they skip

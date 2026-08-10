@@ -12,6 +12,10 @@ Built in 24 hours as a technical exercise. Designed production-grade; parts not
 implemented in the window are explicitly stubbed and documented, never silently
 missing.
 
+**Live demo:** [airport.guydvorkin.com](https://airport.guydvorkin.com) - landing is
+public, chat is behind a free sign-in. Backend health:
+[Cloud Run /health](https://airport-agent-532602559497.europe-west3.run.app/health).
+
 ## What it can answer
 
 - Which airports in a region are strong candidates for terminal expansion
@@ -43,13 +47,33 @@ any reviewer can read and re-run; the LLM's job is orchestration and explanation
 
 ## Running locally
 
-```
-# 1. Copy env template and fill in keys (OpenRouter + Postgres)
+Prerequisites: [uv](https://docs.astral.sh/uv/) (it resolves Python >= 3.11 from
+`pyproject.toml` itself) and Node 20+ with npm. All commands run from the repo
+root, in PowerShell or any POSIX shell (in `cmd.exe`, read `cp` as `copy`).
+
+```bash
+# 1. Environment - fill in OPENROUTER_API_KEY (DATABASE_URL is optional, see below)
 cp .env.example .env
-# 2. Load data snapshots + views    (details: ingestion/README)
-# 3. Start agent backend            (details: services/agent/README)
-# 4. Start web UI                   (details: apps/web/README)
+
+# 2. Agent backend -> http://localhost:8000    (details: services/agent/README.md)
+uv sync --extra dev
+uv run python -m agent
+
+# 3. Web UI -> http://localhost:3000           (details: apps/web/README.md)
+cd apps/web && npm install && npm run dev
 ```
 
-Full quickstart lands with the code. Security posture: no secrets in code or git
-history, gitleaks pre-commit + CI, GitHub secret scanning + push protection.
+No `DATABASE_URL`? The backend starts on a bundled JSON fixture dataset, so the
+whole stack runs before any database exists. Loading the real snapshots into
+Postgres is a later step, not a prerequisite - see
+[ingestion/README.md](ingestion/README.md).
+
+Prove it works:
+
+```bash
+uv run pytest                      # unit + integration - offline, no keys needed
+uv run python -m evals.run_evals   # the 4 exam questions, code-graded, live model
+```
+
+Security posture: no secrets in code or git history, gitleaks pre-commit + CI,
+GitHub secret scanning + push protection.
