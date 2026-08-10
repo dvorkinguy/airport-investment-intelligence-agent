@@ -135,3 +135,46 @@ export function toCsv(headers: string[], rows: string[][]): string {
 export function toTsv(headers: string[], rows: string[][]): string {
   return [headers, ...rows].map((row) => row.join("\t")).join("\n");
 }
+
+export type SortDirection = "asc" | "desc";
+
+export interface SortState {
+  col: number | null;
+  direction: SortDirection | null;
+}
+
+const PARENTHETICAL_RE = /\([^)]*\)/g;
+
+/**
+ * Numeric-aware value for sorting: strips $, commas, %, and any trailing
+ * "(annotation)" - "1,186 (unconcentrated)" -> 1186. Returns null when the
+ * cleaned value isn't a number, so the caller can fall back to a plain
+ * string compare for that column.
+ */
+export function parseSortValue(value: string): number | null {
+  const cleaned = value.replace(PARENTHETICAL_RE, "").replace(/[$,%]/g, "").trim();
+  if (cleaned === "") return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Row indices in sorted order for the given column. Numeric compare when
+ * every value in the column parses via parseSortValue; locale string
+ * compare otherwise. Ties keep their original relative order regardless of
+ * direction (stable sort).
+ */
+export function sortPermutation(rows: string[][], col: number, direction: SortDirection): number[] {
+  const values = rows.map((row) => row[col] ?? "");
+  const allNumeric = values.length > 0 && values.every((v) => parseSortValue(v) !== null);
+  const indices = rows.map((_, i) => i);
+  indices.sort((ia, ib) => {
+    const a = values[ia];
+    const b = values[ib];
+    const cmp = allNumeric
+      ? (parseSortValue(a) as number) - (parseSortValue(b) as number)
+      : a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    return cmp !== 0 ? (direction === "asc" ? cmp : -cmp) : ia - ib;
+  });
+  return indices;
+}

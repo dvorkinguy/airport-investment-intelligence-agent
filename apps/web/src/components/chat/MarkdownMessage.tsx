@@ -12,10 +12,18 @@ const components: Components = {
     void node;
     return <tbody className="divide-y divide-slate-100" {...rest} />;
   },
-  th: ({ node, ...rest }) => {
+  th: ({ node, className, ...rest }) => {
     void node;
     return (
-      <th className="border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700" {...rest} />
+      <th
+        className={[
+          "border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        {...rest}
+      />
     );
   },
   td: ({ node, ...rest }) => {
