@@ -39,12 +39,91 @@ airports (BOS, BDL, PVD, MHT, BGR, BTV) - full New England set is 24 airports on
 
 ## 2. BTS T-100 Segment (demand + capacity history)
 
-*[Pending - filled in once source URLs are verified live. Do not trust a URL here that wasn't
-confirmed with a real HTTP request; dead ends are recorded below, not silently dropped.]*
+**No static prezip URL exists for current-year T-100 data** (unlike on-time performance, section
+3). The selection UI is a classic ASP.NET WebForms page - confirmed live 2026-08-10, scripted
+successfully:
+
+| Step | Detail |
+|---|---|
+| Form URL | https://www.transtats.bts.gov/DL_SelectFields.aspx?gnoyr_VQ=FMG&QO_fu146_anzr=Nv4%20Pn44vr45 |
+| Method | GET the page, harvest `__VIEWSTATE`/`__VIEWSTATEGENERATOR`/`__EVENTVALIDATION` hidden fields, POST back with `cboYear=<year>`, `cboPeriod=All`, `cboGeography=All`, all 50 data-column checkboxes `on`, `chkDownloadZip=on` |
+| Response | The POST response body **is** the zip directly (`Content-Type: application/zip`) - no follow-up link needed. Gotcha hit and fixed: reading the response as `.text` corrupts the binary zip; must save `.content` (raw bytes) and verify the `PK\x03\x04` magic bytes before writing. |
+| Coverage per request | **One submission per year** (`cboPeriod=All`) returns all 12 months. **One file covers both domestic and international** - `DATA_SOURCE` values `DU`/`DF` (domestic) and `IU`/`IF` (international) all present in the same download; no separate geography submission needed. |
+
+**Downloaded and CRC-verified** (`zipfile.testzip()` clean on all three):
+
+| Year | Raw rows | File |
+|---|---|---|
+| 2023 | 529,559 | `data/raw/t100_segment_2023.zip` (17,915,354 bytes) |
+| 2024 | 549,731 | `data/raw/t100_segment_2024.zip` (18,478,250 bytes) |
+| 2025 | 571,097 | `data/raw/t100_segment_2025.zip` (19,546,687 bytes) |
+
+**CLASS filter - a real data-quality finding, not a formality.** T-100's `CLASS` field splits
+scheduled passenger service (`F`) from scheduled all-cargo (`G`), nonscheduled cargo (`P`), and
+nonscheduled/charter passenger (`L`). Measured on the full 2023 file: `CLASS=F` carries
+1,062,293,854 of ~1,067,000,000 total passengers (99.6%) across 9,305,434 departures; `CLASS=G`
+carries 601,564 departures on **249 total passengers** - essentially pure cargo. Anchorage (ANC)
+is a major cargo hub - including `CLASS=G`/`P` would have injected large cargo-only departure
+volume into `long_haul_pct` and flight-growth metrics with zero passenger signal behind it, most
+visibly distorting exactly the airport the exam asks about. **Filtered to `CLASS='F'` only**,
+consistent with `data/airports.csv`'s own `scheduled_service` scoping.
+
+**Origin filter:** kept only if `ORIGIN` is one of the 679 tracked airports in `data/airports.csv`
+- `v_airport_metrics` measures activity as origin-based segments (section 4), so a row only
+matters if its origin is tracked; the destination can be anything (foreign airport, small
+non-tracked US field) and still correctly counts as outbound activity. This does not undercount
+inbound international service: a foreign carrier serving a tracked US airport also reports the
+reverse (outbound) leg from that same US airport on its own row, which survives this filter.
+
+**Grain fix:** raw rows are year/month/origin/dest/carrier/`AIRCRAFT_TYPE` (a carrier flying two
+aircraft types on the same route in the same month reports two rows). `bts_t100`'s primary key
+has no aircraft_type column, so duplicates are **summed** (passengers/seats/departures) into one
+row; `distance_miles` takes MAX across duplicates (physically the same route - should already be
+identical, MAX is a defensive tie-break, not a real choice).
+
+**Result:** 529,559 + 549,731 + 571,097 = 1,650,387 raw rows -> 1,124,393 kept (CLASS=F, origin
+tracked) -> **584,498 rows** in `data/bts_t100.csv` after aircraft-type aggregation. Spot-checked
+non-empty for every exam-named airport: LAX 14,259 rows, SFO 9,385, BOS 9,635, BDL 2,741, SNA
+2,352, ANC 2,363 (route-carrier-month combinations, 2023-2025 combined).
+
+Dead ends hit while scripting the form (recorded for anyone re-running this later):
+- `PREZIP/T_T100_SEGMENT_ALL_CARRIER.zip` (no-prefix guess) - 404.
+- Live cached prefixed files under `/PREZIP/` (e.g. `896816367_T_T100_SEGMENT_ALL_CARRIER.zip`) -
+  return HTTP 200 but are stale (Last-Modified 2015), not current data - schema reference only.
+- `data.bts.gov` / `data.transportation.gov` Socrata catalog search for "T-100 segment" - zero
+  true BTS-table hits (only a third-party derived dataset on a different portal).
+- `bts.gov/airline-data-downloads` - HTTP 403 (Akamai block), consistent across tools.
+- First scripted POST attempt returned a corrupted zip - root cause was reading the httpx/requests
+  response as decoded text instead of raw bytes before writing to disk, not a server-side issue.
 
 ## 3. BTS on-time performance (congestion signal)
 
-*[Pending - filled in once source URLs are verified live.]*
+The pre-aggregated "Airline Delay Cause" product (`OT_DelayCause1.asp`) is **not directly
+scriptable** - confirmed live 2026-08-10: it's a POST-to-self form with JS-cascading dropdowns,
+same family of obstacle as T-100 above but without a clean hidden-field contract to script
+against in the time available. Fell back to the raw per-flight On-Time Performance prezip
+(instructed fallback path), which has a fully static, predictable URL - no form needed:
+
+```
+https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_{YEAR}_{MONTH}.zip
+```
+
+(`MONTH` has no leading zero.) Verified working for all of 2023-2025 (36 files, ~25-31MB each).
+Real column set confirmed by downloading and inspecting one file live (2023-01) before writing
+the aggregation script - 110 columns, of which 6 matter here: `Year`, `Month`, `Dest`,
+`ArrDel15`, `ArrDelayMinutes`, `Cancelled`.
+
+**This is ARRIVAL data - grouped by `Dest`, not `Origin`.** A flight lands (arrives) at its `Dest`
+airport; that's the airport whose congestion this measures. Filter applied per raw row: skip if
+`Cancelled == '1.00'` or `ArrDel15 == ''` (cancelled flights never arrived, so have no meaningful
+delay figure; verified on the 2023-01 sample that all 10,295 cancelled rows are a subset of the
+11,640 empty-`ArrDel15` rows, i.e. the empty-string check alone would have been sufficient, but
+both are checked defensively). `arr_delay_min` sums `ArrDelayMinutes` (already floored at 0 for
+on-time/early arrivals), not the signed `ArrDelay` field (which goes negative for early arrivals
+and would let early arrivals silently cancel out real delay elsewhere in the sum).
+
+*[Final row count + all-36-months confirmation to be added once the aggregation run completes -
+see section 5.]*
 
 ## 4. Schema and view design decisions
 
