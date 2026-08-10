@@ -147,6 +147,7 @@ Stated in-product (the agent says these when relevant) and here:
 | Scoring in SQL views | LLM computes from raw data | Determinism is a hard requirement; SQL is auditable by any reviewer |
 | Four managed platforms (Neon/GCP/Vercel/Cloudflare) | One container | Demonstrates real integration judgment; mitigated by local-first (whole stack runs on a laptop with .env alone) |
 | Postgres checkpoints for memory | In-process memory | Crash-safe, resumable conversations - and it is the same database, no new infra |
+| Connection-liveness discipline (pool health checks + one silent retry) | Assume connections stay alive | Serverless-to-serverless reality: scale-to-zero on both ends (Cloud Run and Neon) means either side can kill idle connections. Found live in testing - the first question after idle failed on a stale pooled connection; fixed at the pool layer, not papered over in the UI |
 
 ## 7. Production readiness - the 8-gate table
 
@@ -191,8 +192,25 @@ Analysts live in Excel, BI dashboards, and IC memos. The tool meets them there:
   auto-investing system; final judgment stays human.
 - Bot protection (Cloudflare Turnstile via Clerk), secrets in managed stores,
   secret scanning + push protection + gitleaks in CI on the repository.
+- IAM posture (GCP): the service runs on a dedicated service account whose only
+  grant is `secretAccessor` on its own four secrets - never the default compute
+  account. Blast radius of a container compromise: its own secrets, nothing
+  else. Deliberately NOT added at this scale: custom roles, IAM conditions,
+  VPC Service Controls, and a separate CI deploy identity (Workload Identity
+  Federation) - each is a production-path line, not a demo build. Knowing
+  where that line sits is the security decision this section documents.
 
 ## 10. The complete picture - production data layers
+
+Professional airport underwriting runs on rating-agency scorecards (Moody's
+publishes a three-factor US Airport Revenue Bonds methodology). The verified
+industry benchmarks our production path targets: cost per enplanement typically
+$8-18 at large hubs; debt per enplanement $5-15 common, above $20 highly
+leveraged; Fitch coverage bands from 1.0x (BBB) to above 2.0x (AAA); and
+non-aeronautical revenue at roughly 37-40% of airport income globally (ACI) -
+which is the direct money link to terminal renovation: expanded terminals grow
+exactly that revenue line. Our capacity-growth score is the demand half of that
+story.
 
 What real underwriting would add, in priority order, each with a named public
 source - designed, not built in the 24-hour window:
