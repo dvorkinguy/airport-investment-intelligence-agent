@@ -26,6 +26,11 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       NEXT_PUBLIC_AGENT_API_URL: DEAD_BACKEND_URL,
+      // These 3 tests exercise the authless path - force it regardless of
+      // whatever a local .env.local has, since Next.js only falls back to
+      // .env.local for vars process.env doesn't already set.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "",
+      CLERK_SECRET_KEY: "",
     },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

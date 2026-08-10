@@ -36,25 +36,32 @@ The agent backend (`services/agent`) must be running separately - see its README
 
 ## Auth (Clerk, env-gated)
 
-`@clerk/nextjs` is wired but off unless both `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and
-`CLERK_SECRET_KEY` are set (`src/lib/clerk-config.ts` is the single check, used by
+`@clerk/nextjs@7.7.1` is wired but off unless both `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+and `CLERK_SECRET_KEY` are set (`src/lib/clerk-config.ts` is the single check, used by
 `src/middleware.ts`, `src/app/layout.tsx`, and `src/app/chat/page.tsx`). With either
-missing - the current deployed state - the app runs exactly as before: landing and
-`/chat` both public, no Clerk component ever mounts, and `src/middleware.ts`'s exported
-handler is a plain passthrough (`NextResponse.next()`). The `matcher` itself can't be
-gated the same way - Next.js statically parses `config.matcher` at build time and
-rejects a conditional expression there - so it stays Clerk's standard pattern
-unconditionally; the middleware function still runs on every request either way, it
-just does nothing when disabled.
+missing the app runs exactly as before: landing and `/chat` both public, no Clerk
+component ever mounts, and `src/middleware.ts`'s exported handler is a plain passthrough
+(`NextResponse.next()`). The `matcher` itself can't be gated the same way - Next.js
+statically parses `config.matcher` at build time and rejects a conditional expression
+there - so it stays Clerk's standard pattern unconditionally; the middleware function
+still runs on every request either way, it just does nothing when disabled.
 
 With both set: landing stays public, `/chat` requires sign-in (whatever methods are
-enabled in the Clerk dashboard - Google + email), `UserButton`/`SignInButton` render in
-the header, and the signed-in user's id/email are attached to `POST /chat` as
-`X-User-Id` / `X-User-Email` for the backend's queries log.
+enabled in the Clerk dashboard - Google + email), `<Show when="signed-in">`/
+`<Show when="signed-out">` render `UserButton`/`SignInButton` in the header (`ClerkProvider`
+is a child of `<body>`, per Clerk's current layout convention - not a wrapper around
+`<html>`), and the signed-in user's session token is attached to `POST /chat` as
+`Authorization: Bearer <token>` (via `useAuth().getToken()`, called fresh per send since
+session tokens are short-lived) for the backend to verify via JWKS. Signed out or Clerk
+disabled -> no `Authorization` header at all.
 
 Middleware uses Clerk's own standard matcher (skip `_next` and static files, always run
-for `/api`) - never inverted into an allowlist of protected paths, since that flips the
-app's only auth gate from default-deny to default-allow.
+for `/api` and `/__clerk`) - never inverted into an allowlist of protected paths, since
+that flips the app's only auth gate from default-deny to default-allow.
+
+Filename is `middleware.ts`, not `proxy.ts` - Clerk names this file by the installed
+Next.js major (`proxy.ts` on 16+, `middleware.ts` on 15 and below) and this app is on
+15.5.23.
 
 ## E2E smoke tests
 

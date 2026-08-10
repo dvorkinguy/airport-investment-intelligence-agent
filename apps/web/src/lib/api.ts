@@ -26,9 +26,8 @@ export async function checkHealth(signal?: AbortSignal): Promise<HealthStatus> {
 
 export interface StreamChatOptions {
   signal?: AbortSignal;
-  /** Attached as X-User-Id / X-User-Email when set (Clerk enabled + signed in) - feeds the backend's queries log. */
-  userId?: string;
-  userEmail?: string;
+  /** Clerk session JWT (Clerk enabled + signed in). Sent as `Authorization: Bearer <token>`; the backend verifies it via JWKS. Absent when signed out or Clerk is disabled - no auth header is sent, matching the authless mode. */
+  token?: string;
 }
 
 /**
@@ -42,8 +41,7 @@ export async function streamChat(
   options?: StreamChatOptions,
 ): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (options?.userId) headers["X-User-Id"] = options.userId;
-  if (options?.userEmail) headers["X-User-Email"] = options.userEmail;
+  if (options?.token) headers["Authorization"] = `Bearer ${options.token}`;
 
   const res = await fetch(`${getApiUrl()}/chat`, {
     method: "POST",

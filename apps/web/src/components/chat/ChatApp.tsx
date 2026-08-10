@@ -12,7 +12,12 @@ import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
 import { BackendDownBanner } from "./BackendDownBanner";
 
-export function ChatApp({ userId, userEmail }: { userId?: string; userEmail?: string } = {}) {
+export function ChatApp({
+  getAuthToken,
+}: {
+  /** Clerk's useAuth().getToken - only passed when signed in (see ChatAppWithAuth). Called fresh per send since session tokens are short-lived. */
+  getAuthToken?: () => Promise<string | null>;
+} = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuestion = searchParams.get("q");
@@ -130,7 +135,8 @@ export function ChatApp({ userId, userEmail }: { userId?: string; userEmail?: st
       };
 
       try {
-        await streamChat(activeThreadId, text, onEvent, { userId, userEmail });
+        const token = (await getAuthToken?.()) ?? undefined;
+        await streamChat(activeThreadId, text, onEvent, { token });
       } catch {
         finalizeWith((m) => ({
           ...m,
@@ -143,7 +149,7 @@ export function ChatApp({ userId, userEmail }: { userId?: string; userEmail?: st
         setSending(false);
       }
     },
-    [threadId, refreshThreads, userId, userEmail],
+    [threadId, refreshThreads, getAuthToken],
   );
 
   useEffect(() => {
