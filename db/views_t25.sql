@@ -75,7 +75,47 @@ COMMENT ON VIEW v_carrier_concentration IS
 
 -- ============================================================================
 -- airport_financials + v_roi_proxy: FAA Form 127 (CATS) financial data.
--- ESTIMATE / conditional - see ADR-004 for whether this landed or was
--- dropped at the research timebox. If dropped, this section is absent and
--- v_roi_proxy does not exist; callers must check for it.
+-- Source: cats.airports.faa.gov "Individual Airports" Form 127 search, bulk
+-- CSV export (exportToCSV=true with no single airport selected returns every
+-- airport that filed for that year - see ADR-004 for the verified URL and
+-- the national-rollup dead end hit first). FY2023-2024, 884 airport-year
+-- reports. net_rev_per_enplanement is computed at ingestion time
+-- ((op_revenue - op_expenses) / enplanements), not an FAA-published field.
 -- ============================================================================
+CREATE TABLE airport_financials (
+    locid                     TEXT NOT NULL,
+    fy                        INTEGER NOT NULL,
+    op_revenue                NUMERIC(14, 2),
+    op_expenses               NUMERIC(14, 2),
+    enplanements              NUMERIC(12, 0),
+    net_rev_per_enplanement   NUMERIC(10, 2),
+    PRIMARY KEY (locid, fy)
+);
+
+-- ESTIMATE. roi_proxy = est_unmet_pax (from v_unmet_demand_est, Tier 1 -
+-- not recomputed here) * net_rev_per_enplanement. Reads as "if the
+-- passengers this airport is estimated to be turning away today flew here
+-- instead, at this airport's current net revenue per enplanement, what
+-- would that be worth" - a proxy for expansion ROI, not a real financial
+-- projection (ignores capacity cost, fare mix shift, induced demand
+-- elasticity). locid is assumed == iata for the tracked airport set - true
+-- for every major/medium hub checked (LAX, SFO, ANC, BOS, BDL, PVD, MHT,
+-- BGR, BTV) but not guaranteed for every small field nationally; a locid
+-- that doesn't match its airports.iata simply won't join and is silently
+-- absent from this view; it is not treated as an error to fix here.
+CREATE VIEW v_roi_proxy AS
+SELECT
+    u.iata,
+    u.year,
+    ROUND(u.est_unmet_pax * f.net_rev_per_enplanement, 0) AS roi_proxy
+FROM v_unmet_demand_est u
+JOIN airport_financials f ON f.locid = u.iata AND f.fy = u.year
+WHERE f.net_rev_per_enplanement IS NOT NULL;
+
+COMMENT ON VIEW v_roi_proxy IS
+    'ESTIMATE built on an ESTIMATE: est_unmet_pax (v_unmet_demand_est, itself '
+    'labeled ESTIMATE) times net_rev_per_enplanement (FAA Form 127, computed '
+    'not FAA-published). A rough expansion-value proxy, not a financial '
+    'projection - ignores capacity cost, fare-mix shift, demand elasticity. '
+    'NULL/absent net_rev_per_enplanement (zero enplanements that year) rows '
+    'are excluded, not zeroed - a real "cannot compute" case.';
