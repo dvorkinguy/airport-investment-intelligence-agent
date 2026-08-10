@@ -208,3 +208,40 @@ All required sanity checks run live against the loaded database and PASS:
 
 No blockers, no silent failures. All 4 exam-question-relevant checks the command center specified
 (LAX/SNA, ANC, SFO, New England) pass against real data end to end.
+
+## 6. Automated view checks
+
+The scoring core had no automated guard - `db/view_checks.sql` +
+`ingestion/run_view_checks.py` close that gap. Every check is a SELECT that returns zero rows on
+pass; a returned row is a self-describing violation. Run live against Neon 2026-08-11:
+
+```
+PASS  score_bounds_0_100
+PASS  component_bounds_0_100
+PASS  weights_reconstruct_composite_within_0_1
+PASS  load_factor_in_0_to_1_2
+PASS  long_haul_pct_in_0_to_1
+PASS  unmet_demand_never_negative
+PASS  new_england_exact_membership
+PASS  ground_truth_lax_2025_passengers
+PASS  ground_truth_anc_2025_long_haul_pct
+PASS  ground_truth_sfo_2025_est_unmet_pax
+
+All 10 checks PASSED.
+```
+
+**Real finding on first run, not a clean pass on the first try:** `load_factor_in_0_to_1_2`
+initially failed with 7 violating rows - all `load_factor = 0.0000` exactly, at GA-heavy fields
+(TEB/Teterboro, BED/Hanscom, PDK/DeKalb-Peachtree, OPF, LUK, ORT, BJC). Traced to real
+`bts_t100` rows: a single `CLASS='F'` segment with 0 passengers but nonzero seats and exactly 1
+departure (e.g. `BED, 2024, carrier OO, 0 passengers, 50 seats, 1 departure`) - almost certainly
+a repositioning/ferry leg technically filed as scheduled service, not a parsing bug (verified
+against the raw table). `load_factor = 0` is mathematically correct there, just not a meaningful
+ratio at zero passenger volume. Scoped the check to `passengers > 0`, matching the same
+reasoning `v_opportunity_score` already applies (its own population is scoped to `passengers >=
+100k`) - documented inline in `db/view_checks.sql`, not silently patched away.
+
+Ground-truth checks use `IS DISTINCT FROM` against a scalar subquery rather than a plain
+`!=` filter, so a *missing* row (e.g. if LAX 2025 disappeared entirely) still surfaces as a
+violation (`actual = NULL`) instead of silently passing because there was nothing to compare
+against.
