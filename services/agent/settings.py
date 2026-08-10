@@ -75,10 +75,25 @@ class Settings(BaseSettings):
     # --- Query log ---
     log_queries: bool = True
 
-    # --- Tier 2 stub (see auth.py) ---
+    # --- FAA live status (keyless public feed; see faa.py) ---
+    faa_status_url: str = "https://nasstatus.faa.gov/api/airport-status-information"
+    faa_timeout_seconds: float = 5.0
+    faa_cache_seconds: float = 300.0
+
+    # --- Clerk auth (see auth.py) ---
+    # clerk_auth_enabled REQUIRES a token; it does not switch verification on.
+    # Verification is always on, so a bearer token from the UI always identifies
+    # the user in the queries log, while the public demo keeps working anonymously.
     clerk_auth_enabled: bool = False
+    # Not needed to verify a session token - JWKS verification is keyless. Held for
+    # Clerk Backend API calls (user lookup, revocation) and mounted on deploy.
     clerk_secret_key: SecretStr | None = None
-    clerk_jwt_issuer: str | None = None
+    #: Clerk Frontend API origin. Override per environment; this default is the
+    #: development instance the demo UI signs into.
+    clerk_jwt_issuer: str | None = "https://busy-viper-68.clerk.accounts.dev"
+    clerk_jwks_url: str | None = None
+    #: Clerk session tokens are short-lived; tolerate small clock skew.
+    clerk_leeway_seconds: int = 30
 
     # --- Derived helpers -------------------------------------------------
     @property
@@ -114,6 +129,19 @@ class Settings(BaseSettings):
         if self.langfuse_enabled is not None:
             return self.langfuse_enabled
         return self.langfuse_keys is not None
+
+    @property
+    def clerk_jwks(self) -> str | None:
+        """Where the signing keys live. Derived from the issuer unless set explicitly."""
+        if self.clerk_jwks_url:
+            return self.clerk_jwks_url
+        if self.clerk_jwt_issuer:
+            return f"{self.clerk_jwt_issuer.rstrip('/')}/.well-known/jwks.json"
+        return None
+
+    @property
+    def clerk_configured(self) -> bool:
+        return bool(self.clerk_jwt_issuer and self.clerk_jwks)
 
 
 @lru_cache(maxsize=1)

@@ -39,6 +39,11 @@ class FixtureRepo:
         self._congestion: list[Row] = data["v_congestion"]
         self._scores: list[Row] = data["v_opportunity_score"]
         self._unmet: list[Row] = data["v_unmet_demand_est"]
+        # T2.5 tables are optional in the fixture for the same reason they are
+        # optional in Postgres: a Tier 1-only dataset is a valid dataset.
+        self._concentration: list[Row] = data.get("v_carrier_concentration", [])
+        self._financials: list[Row] = data.get("airport_financials", [])
+        self._roi: list[Row] = data.get("v_roi_proxy", [])
 
     async def open(self) -> None:  # symmetry with PostgresRepo
         return None
@@ -134,6 +139,26 @@ class FixtureRepo:
 
     async def unmet_demand(self, iata: str, years: int = 3) -> list[Row]:
         return self._per_year(self._unmet, iata, years, "unmet-demand")
+
+    # --- T2.5 (ADR-004): empty is a valid answer, so no UnknownAirportError ---
+
+    def _optional(self, table: list[Row], iata: str, years: int) -> list[Row]:
+        code = normalize_iata(iata)
+        rows = sorted(
+            (dict(r) for r in table if r["iata"] == code),
+            key=lambda r: r["year"],
+            reverse=True,
+        )
+        return rows[: max(1, min(int(years), 20))]
+
+    async def carrier_concentration(self, iata: str, years: int = 3) -> list[Row]:
+        return self._optional(self._concentration, iata, years)
+
+    async def financials(self, iata: str, years: int = 3) -> list[Row]:
+        return self._optional(self._financials, iata, years)
+
+    async def roi_proxy(self, iata: str, years: int = 3) -> list[Row]:
+        return self._optional(self._roi, iata, years)
 
     async def data_vintage(self) -> dict[str, Any]:
         vintage = self._meta.get("vintage", {})

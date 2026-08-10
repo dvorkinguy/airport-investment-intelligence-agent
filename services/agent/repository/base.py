@@ -15,6 +15,19 @@ exactly these keys, so a tool cannot tell which backend answered it.
                         c_congestion, c_flight_growth, c_infra)
     v_unmet_demand_est(iata, year, est_unmet_pax, driver_load_factor,
                        driver_growth_gap, driver_delay_rate)
+
+T2.5 additions (ADR-004). Optional by design: these views may not exist on a
+database that only has the Tier 1 build, so their repository methods return an
+empty list instead of raising, and the tool degrades one source at a time.
+
+    v_carrier_concentration(iata, year, hhi, top_carrier, top_carrier_share)
+    airport_financials(locid, fy, op_revenue, op_expenses, enplanements,
+                       net_rev_per_enplanement)
+    v_roi_proxy(iata, year, roi_proxy)
+
+``airport_financials`` is the one table whose key columns are named differently
+(``locid``/``fy``, FAA Form 127 vocabulary). The repository aliases them to
+``iata``/``year`` so every row a tool sees is on the same grain.
 """
 
 from __future__ import annotations
@@ -42,11 +55,33 @@ UNMET_COLUMNS = (
     "iata", "year", "est_unmet_pax", "driver_load_factor",
     "driver_growth_gap", "driver_delay_rate",
 )
+CONCENTRATION_COLUMNS = ("iata", "year", "hhi", "top_carrier", "top_carrier_share")
+FINANCIAL_COLUMNS = (
+    "iata", "year", "op_revenue", "op_expenses", "enplanements",
+    "net_rev_per_enplanement",
+)
+ROI_COLUMNS = ("iata", "year", "roi_proxy")
 
 SUPPORTED_METRICS = ("opportunity",)
 
 #: Long-haul threshold, documented so every answer can cite it.
 LONG_HAUL_THRESHOLD_MILES = 1500
+
+#: DOJ/FTC merger-guideline bands, used as a reading aid for the HHI - not a
+#: regulatory claim about airports. See db/views_t25.sql and ADR-004.
+HHI_UNCONCENTRATED = 1500
+HHI_HIGHLY_CONCENTRATED = 2500
+
+
+def hhi_band(hhi: float | int | None) -> str | None:
+    """Name the concentration band so the model does not have to remember the cutoffs."""
+    if hhi is None:
+        return None
+    if hhi < HHI_UNCONCENTRATED:
+        return "unconcentrated"
+    if hhi <= HHI_HIGHLY_CONCENTRATED:
+        return "moderately concentrated"
+    return "highly concentrated"
 
 
 class RepoError(RuntimeError):
@@ -86,6 +121,20 @@ class AirportRepo(Protocol):
 
     async def unmet_demand(self, iata: str, years: int = 3) -> list[Row]:
         """Per-year estimated unmet demand for one airport, newest year first."""
+        ...
+
+    # --- T2.5 (ADR-004). Empty list, never an exception, when absent. ---
+
+    async def carrier_concentration(self, iata: str, years: int = 3) -> list[Row]:
+        """Per-year HHI and top carrier for one airport, newest year first."""
+        ...
+
+    async def financials(self, iata: str, years: int = 3) -> list[Row]:
+        """Per-fiscal-year FAA Form 127 financials, newest first, keyed as iata/year."""
+        ...
+
+    async def roi_proxy(self, iata: str, years: int = 3) -> list[Row]:
+        """Per-year expansion-value ESTIMATE for one airport, newest year first."""
         ...
 
     async def data_vintage(self) -> dict[str, Any]:

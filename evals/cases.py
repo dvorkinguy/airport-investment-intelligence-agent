@@ -74,6 +74,27 @@ CASES: tuple[EvalCase, ...] = (
         required_terms=(("estimat",), ("load factor",), ("delay",)),
         notes="Must be labelled an estimate and explained through its drivers.",
     ),
+    EvalCase(
+        id="q5_bangor_financial_health",
+        question="Is Bangor (BGR) a financially healthy investment target?",
+        required_tools=("investment_context",),
+        # net_rev_per_enplanement -11.70 in the fixture; JSON renders it -11.7, so
+        # both spellings are acceptable.
+        required_numbers=(("11.70", "11.7"),),
+        required_terms=(
+            ("bgr", "bangor"),
+            # The finding that matters: the airport loses money per passenger.
+            ("negative", "operating loss", "loss per", "-11.7", "-$11.7"),
+            # roi_proxy must not be presented as a projection.
+            ("estimat",),
+        ),
+        notes=(
+            "The financial reality check. Traffic-side tools say BGR has unmet demand; "
+            "this case exists to prove the agent also surfaces that the airport runs an "
+            "operating loss per enplanement, and labels the ROI proxy an estimate."
+        ),
+        optional_tools=("resolve_airport", "unmet_demand_estimate", "airport_metrics"),
+    ),
 )
 
 #: Any answer of substance has to say what it assumed.

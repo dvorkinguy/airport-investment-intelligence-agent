@@ -1,4 +1,4 @@
-"""The five agent tools.
+"""The agent tools.
 
 Every tool is read-only, bound to an ``AirportRepo``, and returns
 ``(content, artifact)``:
@@ -21,12 +21,17 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 
+from agent import faa
 from agent.logging_config import get_logger
 from agent.repository.base import (
+    HHI_HIGHLY_CONCENTRATED,
+    HHI_UNCONCENTRATED,
     LONG_HAUL_THRESHOLD_MILES,
     AirportRepo,
     RepoError,
+    hhi_band,
 )
+from agent.settings import Settings, get_settings
 
 log = get_logger(__name__)
 
@@ -60,6 +65,33 @@ A_RANK_SCOPE = (
 A_NO_VINTAGE = (
     "The dataset holds no yearly rows yet, so its data vintage is UNKNOWN. State that "
     "the vintage is unknown; do not name a year, a cutoff or an 'as of' date."
+)
+A_HHI = (
+    "Carrier concentration is the Herfindahl-Hirschman Index of an airport's carrier "
+    "passenger shares on the standard 0-10,000 scale, computed from BTS T-100 scheduled "
+    f"passenger service only (cargo excluded). Bands used for reading it: below "
+    f"{HHI_UNCONCENTRATED:,} unconcentrated, {HHI_UNCONCENTRATED:,}-{HHI_HIGHLY_CONCENTRATED:,} "
+    f"moderately concentrated, above {HHI_HIGHLY_CONCENTRATED:,} highly concentrated - the "
+    "DOJ/FTC merger-guideline convention, used here as an interpretation aid and not as a "
+    "regulatory claim about airports."
+)
+A_FINANCIALS = (
+    "Airport financials come from FAA Form 127 (CATS) filings. net_rev_per_enplanement is "
+    "(operating revenue - operating expenses) / enplanements, computed from the filing "
+    "rather than published by the FAA; a negative value means the airport ran an operating "
+    "loss per passenger that year. Form 127 filings lag the fiscal year they cover, so the "
+    "newest financial year available is older than the newest traffic year."
+)
+A_ROI = (
+    "roi_proxy is an ESTIMATE BUILT ON AN ESTIMATE: estimated unmet passengers multiplied by "
+    "net revenue per enplanement. It is a rough expansion-value proxy, not a financial "
+    "projection - it ignores capacity cost, fare-mix shift and demand elasticity."
+)
+A_FAA_LIVE = (
+    "FAA National Airspace System status is a live snapshot of today's operations - ground "
+    "stops, ground delay programmes, closures - at the feed's stated update time. It reflects "
+    "current weather and traffic management. It is NOT evidence about long-term investment "
+    "merit and must never be used to argue for or against an expansion case."
 )
 
 
@@ -95,8 +127,9 @@ def _ok(
     return _dump(content), {"tool": tool_name, "ok": True, "assumptions": assumptions, **payload}
 
 
-def build_tools(repo: AirportRepo) -> list[BaseTool]:
-    """Bind the five read-only tools to a repository backend."""
+def build_tools(repo: AirportRepo, settings: Settings | None = None) -> list[BaseTool]:
+    """Bind the read-only tools to a repository backend."""
+    s = settings or get_settings()
 
     async def _vintage_line() -> tuple[str, dict[str, Any]]:
         v = await repo.data_vintage()
@@ -295,12 +328,132 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
             [A_UNMET, A_CONGESTION, vintage],
         )
 
+    @tool(response_format="content_and_artifact")
+    async def investment_context(iata: str, years: int = 2) -> tuple[str, dict[str, Any]]:
+        """Carrier concentration, airport finances and an expansion-ROI estimate for one airport.
+
+        The financial reality check behind a capacity case. Returns three things:
+        carrier concentration (HHI plus the top carrier and its share, i.e. how much
+        of the airport's service rides on one airline's decisions); FAA Form 127
+        operating revenue, expenses and net revenue per enplanement; and roi_proxy,
+        an estimated expansion value. Use it whenever the question asks whether an
+        airport is a financially sound or healthy investment, and alongside a
+        ranking or an unmet-demand answer to test whether the airport can actually
+        fund or benefit from the capacity.
+
+        Each of the three sources is optional and reported as unavailable on its own
+        if that airport did not file or the view is not deployed.
+
+        Args:
+            iata: IATA code (e.g. "BGR") or a place name to resolve.
+            years: How many recent years to return per source (default 2).
+        """
+        try:
+            code = await _coerce_iata(iata)
+        except RepoError as exc:
+            return await _fail("investment_context", str(exc))
+
+        sources: dict[str, Any] = {}
+        available: list[str] = []
+        for key, fetch in (
+            ("carrier_concentration", repo.carrier_concentration),
+            ("financials", repo.financials),
+            ("roi_proxy_estimate", repo.roi_proxy),
+        ):
+            try:
+                rows = await fetch(code, years=years)
+            except RepoError as exc:
+                # One missing view must not cost the other two.
+                sources[key] = {"unavailable": str(exc)}
+                continue
+            if not rows:
+                sources[key] = {"unavailable": f"no {key.replace('_', ' ')} rows for {code}"}
+                continue
+            if key == "carrier_concentration":
+                rows = [{**r, "concentration_band": hhi_band(r.get("hhi"))} for r in rows]
+            sources[key] = rows
+            available.append(key)
+
+        if not available:
+            return await _fail(
+                "investment_context",
+                f"no carrier-concentration, financial or ROI-estimate rows exist for {code}",
+            )
+
+        vintage, _ = await _vintage_line()
+        assumptions = [A_HHI, A_FINANCIALS, A_ROI, vintage]
+        financial_years = sorted(
+            {r["year"] for r in sources.get("financials", []) if isinstance(r, dict) and "year" in r},
+            reverse=True,
+        )
+        return _ok(
+            "investment_context",
+            {
+                "iata": code,
+                "sources_available": available,
+                "financial_years_covered": financial_years,
+                "roi_proxy_label": "ESTIMATE",
+                **sources,
+            },
+            assumptions,
+        )
+
+    @tool(response_format="content_and_artifact")
+    async def faa_live_status(iata: str) -> tuple[str, dict[str, Any]]:
+        """Live FAA operational status for one airport: ground stops, delays, closures.
+
+        Reads the FAA National Airspace System status feed for what is happening at
+        this airport RIGHT NOW. Use it only when the user asks about current or
+        today's conditions, delays or closures.
+
+        This is an operations snapshot, not investment evidence. Never cite it as a
+        reason to invest or not invest in an airport, and never mix it into a
+        historical trend: a thunderstorm this afternoon says nothing about a terminal
+        expansion case. Historical congestion belongs to `compare_airports`.
+
+        Args:
+            iata: IATA code (e.g. "BOS") or a place name to resolve.
+        """
+        try:
+            code = await _coerce_iata(iata)
+        except RepoError as exc:
+            return await _fail("faa_live_status", str(exc))
+        status = await faa.airport_status(
+            code,
+            url=s.faa_status_url,
+            timeout=s.faa_timeout_seconds,
+            ttl=s.faa_cache_seconds,
+        )
+        if not status.get("available"):
+            # A dead external feed is a normal outcome, reported as data, not an error:
+            # the rest of the answer is built on SQL and stays valid.
+            return _ok(
+                "faa_live_status",
+                {
+                    "iata": code,
+                    "live_status_available": False,
+                    "reason": status.get("error"),
+                    "instruction": (
+                        "Say the FAA live feed is unavailable right now. Do not "
+                        "substitute historical delay data for live status."
+                    ),
+                },
+                [A_FAA_LIVE],
+            )
+        return _ok(
+            "faa_live_status",
+            {"live_status_available": True, "source": "FAA NAS status feed", **status},
+            [A_FAA_LIVE],
+        )
+
     return [
         resolve_airport,
         rank_airports,
         airport_metrics,
         compare_airports,
         unmet_demand_estimate,
+        investment_context,
+        faa_live_status,
     ]
 
 
@@ -310,4 +463,6 @@ TOOL_NAMES = (
     "airport_metrics",
     "compare_airports",
     "unmet_demand_estimate",
+    "investment_context",
+    "faa_live_status",
 )

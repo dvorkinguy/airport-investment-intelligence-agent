@@ -80,7 +80,7 @@ def build_graph(
 ):
     """Compile the agent graph against a repository backend."""
     s = settings or get_settings()
-    tools: list[BaseTool] = build_tools(repo)
+    tools: list[BaseTool] = build_tools(repo, s)
     by_name = {t.name: t for t in tools}
     model = llm or build_llm(s)
     # Named runs, so a trace reads "agent-step" / "final-answer" rather than two

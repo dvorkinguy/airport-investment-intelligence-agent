@@ -51,13 +51,16 @@ def case(case_id: str) -> EvalCase:
     return next(c for c in CASES if c.id.startswith(case_id))
 
 
-def test_the_suite_covers_the_four_exam_questions() -> None:
-    assert len(CASES) == 4
+def test_the_suite_covers_the_four_exam_questions_plus_the_financial_check() -> None:
+    assert len(CASES) == 5
     assert {c.id for c in CASES} == {
         "q1_new_england_expansion",
         "q2_lax_vs_sna_congestion",
         "q3_anchorage_long_haul",
         "q4_sfo_unmet_demand",
+        # Not an exam question: the T2.5 differentiator (ADR-004), guarding that a
+        # capacity case gets tested against the airport's actual finances.
+        "q5_bangor_financial_health",
     }
     assert all(c.required_tools and c.required_numbers for c in CASES)
 

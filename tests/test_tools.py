@@ -22,9 +22,9 @@ async def call(tool: Any, **args: Any):
     )
 
 
-def test_exactly_five_tools_with_the_contract_names(tools: dict[str, Any]) -> None:
+def test_the_tool_set_matches_the_contract_names(tools: dict[str, Any]) -> None:
     assert set(tools) == set(TOOL_NAMES)
-    assert len(TOOL_NAMES) == 5
+    assert len(TOOL_NAMES) == 7
 
 
 def test_every_tool_documents_itself_for_the_model(tools: dict[str, Any]) -> None:

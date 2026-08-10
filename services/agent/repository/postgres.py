@@ -91,6 +91,37 @@ SELECT MIN(year) AS first_year, MAX(year) AS last_year,
 FROM v_airport_metrics
 """
 
+# --- T2.5 (ADR-004). Queried one source at a time on purpose: a database with
+# only the Tier 1 build is missing all three, and one absent view must not take
+# the other two down with it.
+
+Q_CONCENTRATION = """
+SELECT iata, year, hhi, top_carrier, top_carrier_share
+FROM v_carrier_concentration
+WHERE iata = %(iata)s
+ORDER BY year DESC
+LIMIT %(years)s
+"""
+
+# locid/fy are FAA Form 127's names for iata/year; aliased so every T2.5 row a
+# tool sees is on the same grain as the Tier 1 rows beside it.
+Q_FINANCIALS = """
+SELECT locid AS iata, fy AS year, op_revenue, op_expenses, enplanements,
+       net_rev_per_enplanement
+FROM airport_financials
+WHERE locid = %(iata)s
+ORDER BY fy DESC
+LIMIT %(years)s
+"""
+
+Q_ROI = """
+SELECT iata, year, roi_proxy
+FROM v_roi_proxy
+WHERE iata = %(iata)s
+ORDER BY year DESC
+LIMIT %(years)s
+"""
+
 
 def coerce_numeric(value: Any) -> Any:
     """Postgres NUMERIC arrives as ``Decimal``, which JSON-encodes as a string.
@@ -217,6 +248,30 @@ class PostgresRepo:
 
     async def unmet_demand(self, iata: str, years: int = 3) -> list[Row]:
         return await self._per_year(Q_UNMET, iata, years, "unmet-demand")
+
+    # --- T2.5 (ADR-004) ---------------------------------------------------
+
+    async def _optional(self, sql: str, iata: str, years: int) -> list[Row]:
+        """Missing rows and a missing view are the same answer here: nothing to add.
+
+        These three sources are additive context, not the analysis. An airport with
+        no FAA Form 127 filing is a normal, common case, and a database carrying
+        only the Tier 1 views is a supported deployment - neither is an error worth
+        failing a question over.
+        """
+        return await self._select(
+            sql,
+            {"iata": normalize_iata(iata), "years": max(1, min(int(years), 20))},
+        )
+
+    async def carrier_concentration(self, iata: str, years: int = 3) -> list[Row]:
+        return await self._optional(Q_CONCENTRATION, iata, years)
+
+    async def financials(self, iata: str, years: int = 3) -> list[Row]:
+        return await self._optional(Q_FINANCIALS, iata, years)
+
+    async def roi_proxy(self, iata: str, years: int = 3) -> list[Row]:
+        return await self._optional(Q_ROI, iata, years)
 
     async def data_vintage(self) -> dict[str, Any]:
         rows = await self._select(Q_VINTAGE, {})
