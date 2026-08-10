@@ -25,7 +25,9 @@ images:
 
 substitutions:
   _GIT_SHA: dev
-  _IMAGE: europe-west3-docker.pkg.dev/airport-intel-agent/airport-agent/airport-agent:latest
+  # cloud-run-source-deploy is the repository `gcloud run deploy --source`
+  # created; reusing it keeps one registry rather than two.
+  _IMAGE: europe-west3-docker.pkg.dev/airport-intel-agent/cloud-run-source-deploy/airport-agent:latest
 
 options:
   # The project has no legacy build bucket; log to Cloud Logging only.

@@ -180,6 +180,13 @@ share one endpoint:
 A present-but-invalid token is always a 401. Downgrading a forged token to
 "anonymous" would hide exactly the event worth seeing.
 
+Verified end to end against the deployed service on 2026-08-11: a real Clerk
+session token minted from the Backend API was accepted, and the verified `sub`
+reached both the `queries` row and the Langfuse trace; a request carrying a
+spoofed `X-User-Id` logged as `anonymous`. `user_email` stays NULL because
+Clerk's default session token carries no email claim - add one via a Clerk JWT
+template if the audit log needs it.
+
 ## Observability
 
 **Langfuse** (`observability.py`) traces every request against
