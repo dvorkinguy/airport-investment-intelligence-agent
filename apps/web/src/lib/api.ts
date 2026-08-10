@@ -24,6 +24,13 @@ export async function checkHealth(signal?: AbortSignal): Promise<HealthStatus> {
   }
 }
 
+export interface StreamChatOptions {
+  signal?: AbortSignal;
+  /** Attached as X-User-Id / X-User-Email when set (Clerk enabled + signed in) - feeds the backend's queries log. */
+  userId?: string;
+  userEmail?: string;
+}
+
 /**
  * Consumes the POST /chat SSE stream. Uses fetch + a manual reader because the
  * backend needs a POST body - the browser EventSource API is GET-only.
@@ -32,13 +39,17 @@ export async function streamChat(
   threadId: string,
   message: string,
   onEvent: (event: ChatEvent) => void,
-  signal?: AbortSignal,
+  options?: StreamChatOptions,
 ): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (options?.userId) headers["X-User-Id"] = options.userId;
+  if (options?.userEmail) headers["X-User-Email"] = options.userEmail;
+
   const res = await fetch(`${getApiUrl()}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ thread_id: threadId, message, stream: true }),
-    signal,
+    signal: options?.signal,
   });
 
   if (!res.ok || !res.body) {

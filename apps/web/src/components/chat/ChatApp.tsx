@@ -12,7 +12,7 @@ import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
 import { BackendDownBanner } from "./BackendDownBanner";
 
-export function ChatApp() {
+export function ChatApp({ userId, userEmail }: { userId?: string; userEmail?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuestion = searchParams.get("q");
@@ -130,7 +130,7 @@ export function ChatApp() {
       };
 
       try {
-        await streamChat(activeThreadId, text, onEvent);
+        await streamChat(activeThreadId, text, onEvent, { userId, userEmail });
       } catch {
         finalizeWith((m) => ({
           ...m,
@@ -143,7 +143,7 @@ export function ChatApp() {
         setSending(false);
       }
     },
-    [threadId, refreshThreads],
+    [threadId, refreshThreads, userId, userEmail],
   );
 
   useEffect(() => {

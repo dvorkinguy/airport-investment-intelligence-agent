@@ -34,8 +34,26 @@ The agent backend (`services/agent`) must be running separately - see its README
 - Pinned to Next.js 15 per the brief, not the currently-latest 16.x that `create-next-app@latest`
   installs by default.
 
+## Auth (Clerk, env-gated)
+
+`@clerk/nextjs` is wired but off unless both `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and
+`CLERK_SECRET_KEY` are set (`src/lib/clerk-config.ts` is the single check, used by
+`src/middleware.ts`, `src/app/layout.tsx`, and `src/app/chat/page.tsx`). With either
+missing - the current deployed state - the app runs exactly as before: landing and
+`/chat` both public, no Clerk component ever mounts, and `src/middleware.ts` exports an
+empty `matcher` so it never runs at all (zero behavior, zero invocation cost).
+
+With both set: landing stays public, `/chat` requires sign-in (whatever methods are
+enabled in the Clerk dashboard - Google + email), `UserButton`/`SignInButton` render in
+the header, and the signed-in user's id/email are attached to `POST /chat` as
+`X-User-Id` / `X-User-Email` for the backend's queries log.
+
+Middleware uses Clerk's own standard matcher (skip `_next` and static files, always run
+for `/api`) - never inverted into an allowlist of protected paths, since that flips the
+app's only auth gate from default-deny to default-allow.
+
 ## Stubbed (Tier 2, not this window)
 
-- Clerk auth - slot comment in `src/app/layout.tsx` header, chat currently public
 - PostHog analytics
 - Deployed backend URL (currently points at `localhost:8000` by default)
+- Custom Clerk sign-in/sign-up pages (uses Clerk's default hosted flow)
