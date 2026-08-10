@@ -40,8 +40,12 @@ The agent backend (`services/agent`) must be running separately - see its README
 `CLERK_SECRET_KEY` are set (`src/lib/clerk-config.ts` is the single check, used by
 `src/middleware.ts`, `src/app/layout.tsx`, and `src/app/chat/page.tsx`). With either
 missing - the current deployed state - the app runs exactly as before: landing and
-`/chat` both public, no Clerk component ever mounts, and `src/middleware.ts` exports an
-empty `matcher` so it never runs at all (zero behavior, zero invocation cost).
+`/chat` both public, no Clerk component ever mounts, and `src/middleware.ts`'s exported
+handler is a plain passthrough (`NextResponse.next()`). The `matcher` itself can't be
+gated the same way - Next.js statically parses `config.matcher` at build time and
+rejects a conditional expression there - so it stays Clerk's standard pattern
+unconditionally; the middleware function still runs on every request either way, it
+just does nothing when disabled.
 
 With both set: landing stays public, `/chat` requires sign-in (whatever methods are
 enabled in the Clerk dashboard - Google + email), `UserButton`/`SignInButton` render in
@@ -51,6 +55,20 @@ the header, and the signed-in user's id/email are attached to `POST /chat` as
 Middleware uses Clerk's own standard matcher (skip `_next` and static files, always run
 for `/api`) - never inverted into an allowlist of protected paths, since that flips the
 app's only auth gate from default-deny to default-allow.
+
+## E2E smoke tests
+
+```bash
+npm run test:e2e   # installs Chromium on first run, then builds+starts+tests
+```
+
+3 tests (`e2e/smoke.spec.ts`), one production build shared across all of them (backend
+URL intentionally pointed at a dead port - see `playwright.config.ts`):
+
+1. Landing renders the title, all 4 exam-question cards, and Start asking.
+2. `/chat` renders the input, send button, and mic button.
+3. Backend unreachable: the amber banner shows the production wording and nothing else
+   breaks (input/send button still render, no uncaught page errors).
 
 ## Stubbed (Tier 2, not this window)
 
