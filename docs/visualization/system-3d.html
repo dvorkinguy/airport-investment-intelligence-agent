@@ -183,7 +183,7 @@
 <div class="hud" id="topbar">
   <div id="brand">
     <h1>Airport Investment Intelligence Agent</h1>
-    <p>Live system map &middot; source of truth: docs/architecture.md, ADR-001/002/003, services/agent/graph.py</p>
+    <p>Live system map &middot; source of truth: docs/architecture.md, ADR-001/002/003/004, services/agent/graph.py</p>
   </div>
   <div id="actions">
     <button class="btn" id="btnRun" type="button">Run a query</button>
@@ -233,10 +233,10 @@
 <pre>User (browser)
  |
  +-- Next.js chat UI, apps/web            [built; Vercel deploy planned]
- |     +-- Clerk sign-in + Cloudflare Turnstile                [planned]
+ |     +-- Clerk sign-in + Cloudflare Turnstile
  |     +-- airport.guydvorkin.com -> Vercel CNAME                [planned]
  |
- +-- Cloud Run - FastAPI + LangGraph agent            [deploy planned; runs locally]
+ +-- Cloud Run (europe-west3) - FastAPI + LangGraph agent    [LIVE]
  |     |  POST /chat (SSE stream)
  |     |
  |     |  START -> agent -> route() -> tools -> agent -> ... -> END
@@ -245,19 +245,21 @@
  |     |    checkpointer: AsyncPostgresSaver -> Neon
  |     |
  |     +-- tools: rank_airports, compare_airports, airport_metrics,
- |     |          unmet_demand_estimate, resolve_airport
- |     +-- Langfuse traces                                     [planned - Tier 2 stub]
+ |     |          unmet_demand_estimate, resolve_airport,
+ |     |          investment_context, faa_live_status
+ |     +-- Langfuse traces
  |
  +-- Neon Postgres
- |     tables: airports, regions, bts_t100, bts_ontime
- |     views : v_airport_metrics, v_congestion,
- |             v_opportunity_score, v_unmet_demand_est
- |     state : LangGraph checkpoints  |  queries log table     [planned]
+ |     tables: airports, regions, bts_t100, bts_ontime, airport_financials
+ |     views : v_airport_metrics, v_congestion, v_opportunity_score,
+ |             v_unmet_demand_est, v_carrier_concentration, v_roi_proxy
+ |     state : LangGraph checkpoints  |  queries log table
  |
  +-- OpenRouter - AGENT_MODEL=anthropic/claude-sonnet-4.5
                   fallback default openai/gpt-4o-mini
 
-Ingestion (snapshot-first): BTS T-100 + BTS on-time + OurAirports/FAA -> Neon</pre>
+Ingestion (snapshot-first): BTS T-100 + BTS on-time + OurAirports/FAA -> Neon
+Live (not snapshotted): FAA NAS status feed - faa_live_status only, 5-min cache</pre>
     <ul>
       <li>Hardware acceleration may be off in <code>chrome://settings/system</code>.</li>
       <li>If the page is offline, Three.js cannot load from the CDN.</li>
@@ -342,15 +344,15 @@ const NODES = [
     tech:'Next.js 15 App Router + Tailwind, TypeScript strict, in <code>apps/web</code>. Landing page is public and carries the four exam questions as click-to-ask cards; <code>/chat</code> renders the SSE token stream with GFM tables, an assumptions footnote and a local thread sidebar. Built and running locally - the Vercel project and the airport.guydvorkin.com CNAME are Tier 2 and not up yet.',
     adr:'ADR-002 (Vercel role; Cloudflare deliberately not in front)' },
 
-  { id:'clerk', pri:1, label:'Clerk + Turnstile', sub:'Google / magic link', tier:'cross', pos:[-50,22,-34], size:[19,5,9], shape:'box', planned:true,
+  { id:'clerk', pri:1, label:'Clerk + Turnstile', sub:'Google / magic link', tier:'cross', pos:[-50,22,-34], size:[19,5,9], shape:'box',
     plain:'Sign-in without passwords, plus a bot check so the public demo cannot be scraped or run up an LLM bill.',
-    tech:'Clerk handles Google one-click and email magic link; Cloudflare Turnstile is enabled through Clerk. Backend side is a JWT dependency - present as a Tier 2 stub in <code>services/agent/auth.py</code>, <code>clerk_auth_enabled=False</code>.',
+    tech:'Clerk handles Google one-click and email magic link; Cloudflare Turnstile is enabled through Clerk. <code>middleware.ts</code> gates <code>/chat</code>; the backend independently verifies the session token\'s RS256 signature against Clerk\'s JWKS in <code>services/agent/auth.py</code> and takes identity only from those verified claims, never from a header. <code>clerk_auth_enabled</code> (default false) decides whether a token is required - verification itself is always on, so the public demo stays anonymous-friendly while a signed-in caller is always real.',
     adr:'ADR-003 #3, ADR-002 (Turnstile via Clerk)' },
 
   /* --- runtime ---------------------------------------------------------- */
   { id:'api', pri:0, label:'FastAPI  POST /chat', sub:'SSE stream', tier:'runtime', pos:[0,13,0], size:[22,5,10], shape:'box',
     plain:'The front door of the agent service. It accepts a question, runs the agent, and streams the answer out as it is generated.',
-    tech:'FastAPI app in <code>services/agent/main.py</code>. Endpoints: <code>GET /health</code>, <code>GET /</code>, <code>POST /chat</code>. On boot it builds the repository (Postgres when DATABASE_URL is set, fixtures otherwise), the checkpointer, and compiles the graph once.',
+    tech:'FastAPI app in <code>services/agent/main.py</code>. Endpoints: <code>GET /health</code>, <code>GET /</code>, <code>POST /chat</code>. On boot it builds the repository (Postgres when DATABASE_URL is set, fixtures otherwise), the checkpointer, and compiles the graph once. Deployed on Cloud Run (europe-west3): digest-pinned multi-stage image, dedicated least-privilege service account (not the default compute account), secrets mounted from Secret Manager - never baked into the image.',
     adr:'ADR-003 #1 (agent runtime)' },
 
   { id:'agent', pri:0, label:'agent node', tier:'runtime', pos:[-13,4,0], size:[15,6,11], shape:'box',
@@ -388,11 +390,19 @@ const NODES = [
     plain:'Turns a place name into an airport code - "Santa Ana" becomes SNA - before any other tool runs.',
     tech:'Fuzzy match over the <code>airports</code> table with exact IATA/ICAO hits ranked first. Other tools call it internally via <code>_coerce_iata</code>, so the model can pass a city name anywhere a code is expected.',
     adr:'ADR-001 (OurAirports / FAA as the identity source)' },
+  { id:'t_inv', pri:2,   label:'investment_context',   tier:'runtime', pos:[30,-8,60],  size:[13,3.2,6.4], shape:'chip', stagger:true,
+    plain:'The financial reality check behind a capacity case: how much of the airport rides on one airline, whether it is financially healthy, and a rough expansion-value estimate.',
+    tech:'Combines three T2.5 sources - <code>v_carrier_concentration</code> (HHI), <code>airport_financials</code> (FAA Form 127), <code>v_roi_proxy</code> - each fetched and reported independently, so one missing view never costs the other two.',
+    adr:'ADR-004 (HHI + Form 127 ROI proxy)' },
+  { id:'t_faa', pri:2,   label:'faa_live_status',      tier:'runtime', pos:[30,-8,-60], size:[13,3.2,6.4], shape:'chip', stagger:true,
+    plain:'Checks what is happening at an airport right now - ground stops, delays, closures - from the FAA\'s live operations feed.',
+    tech:'The one tool that never reads Neon: calls the FAA NAS status feed directly, 5-minute in-process cache. Its own prompt text bars it from being cited as investment evidence - a thunderstorm this afternoon says nothing about a terminal expansion case.',
+    adr:'ADR-003 (tool set), services/agent/tools.py (A_FAA_LIVE)' },
 
-  { id:'langfuse', pri:1, label:'Langfuse', sub:'LLM traces', tier:'cross', pos:[52,4,-30], size:[17,5,9], shape:'box', planned:true,
+  { id:'langfuse', pri:1, label:'Langfuse', sub:'LLM traces', tier:'cross', pos:[52,4,-30], size:[17,5,9], shape:'box',
     plain:'Records every model call - what went in, what came out, how long it took, what it cost - so a wrong answer can be traced instead of guessed at.',
-    tech:'Tier 2. The Langfuse project and keys exist; the callback slot in <code>services/agent/observability.py</code> is still a stub and emits nothing - the code logs a warning saying exactly that rather than pretending to trace.',
-    adr:'ADR-003 #5 (Langfuse tracing, Tier 2)' },
+    tech:'One root span per chat request (<code>session_id=thread_id</code>, environment prod on Cloud Run), with the LangChain callback handler producing a generation span per model call and a tool span per tool - so a bad answer traces to whether it came from Neon or fixtures, and what each question actually cost. A missing key hands back a working no-op span rather than branching call sites on whether tracing is on.',
+    adr:'ADR-003 #5 (Langfuse tracing)' },
 
   /* --- data plane ------------------------------------------------------- */
   { id:'tbl_t100', pri:2,     label:'bts_t100',   sub:'segments', tier:'data', pos:[-42,-19,-36], size:[12,3.4,7], shape:'chip',
@@ -429,14 +439,27 @@ const NODES = [
     tech:'<code>max(0, demand pressure - available capacity)</code> from three independently non-negative signals: load factor above a 0.80 comfort threshold, the passenger-versus-seat growth gap, and persistent delay. The calibration constants are stated judgment calls, not fitted to data.',
     adr:'ADR-001 mitigation #3 (estimated, not observed)' },
 
+  { id:'tbl_financials', pri:2, label:'airport_financials', sub:'FAA Form 127', tier:'data', pos:[20,-19,-24], size:[12,3.4,7], shape:'chip',
+    plain:'What each airport actually earns and spends: operating revenue, operating expenses, enplanements, by fiscal year.',
+    tech:'FAA Form 127 (CATS) bulk CSV export, FY2023-2024 - filings lag the fiscal year they cover, so a FY2025 pull today would be incomplete rather than simply unavailable. <code>net_rev_per_enplanement</code> is computed at load time, not FAA-published; NULL (not zero) when enplanements is blank.',
+    adr:'ADR-004 #2 (individual-airports CSV export, not the national rollup)' },
+  { id:'v_carrier_conc', pri:1, label:'v_carrier_concentration', sub:'HHI', tier:'data', pos:[20,-19,0], size:[16,3.6,7], shape:'chip',
+    plain:'How much of an airport\'s traffic rides on one airline\'s decisions, as a single concentration number.',
+    tech:'Herfindahl-Hirschman Index of carrier passenger shares from <code>bts_t100</code>, 0-10,000 scale, DOJ/FTC concentration bands. No new source - built straight from Tier 1\'s CLASS=F passenger-only data.',
+    adr:'ADR-004 #1 (HHI, cites Moody\'s airport revenue bond methodology)' },
+  { id:'v_roi_proxy', pri:1, label:'v_roi_proxy', sub:'estimate on estimate', tier:'data', pos:[20,-19,24], size:[16,3.6,7], shape:'chip', stagger:true,
+    plain:'A rough dollar value for unmet demand: what it could be worth if the airport captured it, given how it currently earns per passenger.',
+    tech:'<code>est_unmet_pax &times; net_rev_per_enplanement</code>. An estimate built on an estimate - ignores capacity cost, fare mix and demand elasticity, stated in the view comment and in every answer that cites it. At several exam airports (ANC, BDL, BGR, BTV, MHT) net revenue per enplanement is negative, so a positive roi_proxy there is not unambiguous good news.',
+    adr:'ADR-004 #2 (joins v_unmet_demand_est + airport_financials)' },
+
   { id:'ckpt', pri:1, label:'LangGraph checkpoints', sub:'AsyncPostgresSaver', tier:'data', pos:[-28,-29,0], size:[22,4.4,9], shape:'box',
     plain:'The conversation memory. It is why a follow-up like "and how does that compare to Providence?" still knows what you were talking about.',
     tech:'<code>AsyncPostgresSaver</code> over a psycopg pool, tables created by <code>saver.setup()</code> on boot. Crash-safe: state lives in Postgres, not in process memory. Falls back to <code>MemorySaver</code> when DATABASE_URL is absent, and says so in the logs.',
     adr:'ADR-003 #1 (Postgres-checkpointed conversations)' },
 
-  { id:'qlog', pri:2, label:'queries log table', tier:'data', pos:[0,-29,0], size:[19,4.4,9], shape:'box', planned:true,
+  { id:'qlog', pri:2, label:'queries log table', tier:'data', pos:[0,-29,0], size:[19,4.4,9], shape:'box',
     plain:'A record of every question asked, which tools ran, and how long it took - usage tracking that doubles as per-user history.',
-    tech:'Decided in ADR-003 #4, not yet in <code>db/schema.sql</code>. The current schema holds four tables: airports, regions, bts_t100, bts_ontime.',
+    tech:'The <code>queries</code> table, created with <code>CREATE TABLE IF NOT EXISTS</code> at service startup in <code>services/agent/query_log.py</code> - service-owned, deliberately outside <code>db/schema.sql</code> which belongs to the data workstream. Records thread/user id, tools used, latency, model, and the Langfuse trace id. Writes are best-effort: a logging failure is swallowed to a warning and never fails the answer.',
     adr:'ADR-003 #4 (usage tracking)' },
 
   /* --- model gateway ---------------------------------------------------- */
@@ -477,6 +500,7 @@ const EDGES = [
   ['api','agent'],
   ['agent','edge_cond'], ['edge_cond','tools'], ['tools','agent'],
   ['tools','t_rank'], ['tools','t_cmp'], ['tools','t_met'], ['tools','t_unmet'], ['tools','t_res'],
+  ['tools','t_inv'], ['tools','t_faa'],
   ['agent','openrouter'], ['openrouter','m_primary'], ['openrouter','m_fallback'],
   ['agent','ckpt'], ['agent','langfuse'], ['api','qlog'],
 
@@ -486,12 +510,15 @@ const EDGES = [
   ['t_met','v_metrics',1],
   ['t_unmet','v_unmet',1],
   ['t_res','tbl_airports',1],
+  ['t_inv','v_carrier_conc',1], ['t_inv','tbl_financials',1], ['t_inv','v_roi_proxy',1],
 
   /* view -> its inputs (thin) */
   ['v_metrics','tbl_t100',1],
   ['v_cong','tbl_ontime',1],
   ['v_opp','v_metrics',1], ['v_opp','v_cong',1], ['v_opp','tbl_airports',1],
   ['v_unmet','v_metrics',1], ['v_unmet','v_cong',1],
+  ['v_carrier_conc','tbl_t100',1],
+  ['v_roi_proxy','v_unmet',1], ['v_roi_proxy','tbl_financials',1],
 
   /* ingestion */
   ['src_t100','ingest'], ['src_ontime','ingest'], ['src_air','ingest'],
@@ -509,7 +536,7 @@ const PLANES = [
 
 /* Containers: [label, cx,cy,cz, w,h,d, tierKey, plannedNote] */
 const BOXES = [
-  ['GCP Cloud Run  -  agent service', 2, 4, 0, 84, 26, 100, 'runtime', 'deploy planned - runs locally today'],
+  ['GCP Cloud Run  -  agent service', 2, 4, 0, 84, 26, 100, 'runtime', 'LIVE - europe-west3, hardened image + dedicated SA + Secret Manager'],
   ['Neon Postgres', -22, -24, 0, 66, 24, 88, 'data', null]
 ];
 
