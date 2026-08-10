@@ -170,15 +170,41 @@ Decisions not obvious from the SQL comments alone:
 
 ## 5. Load + sanity check results
 
-*[Pending final run once BTS snapshots are built. Partial results already confirmed against the
-live Neon database (`airport-intel`, eu-central-1) during the schema/views smoke test:]*
+Full load run 2026-08-10/11 against Neon (`airport-intel`, eu-central-1), `uv run ingestion/load.py`:
 
-- `schema.sql` and `views.sql` both apply cleanly end-to-end (0 errors after the ROUND cast fix
-  above).
-- `airports` table: 679 rows loaded, matches section 1 exactly.
-- New England join sanity check (`airports JOIN regions ON state`, `WHERE region = 'new_england'`):
-  **24 airports**, including all 6 named in the exam brief (BOS, BDL, PVD, MHT, BGR, BTV) - ran
-  and verified live, full result list available in the load session.
+```
+Applied db\schema.sql
+Loaded airports: 679 rows from data\airports.csv
+Loaded bts_t100: 584498 rows from data\bts_t100.csv
+Loaded bts_ontime: 12164 rows from data\bts_ontime.csv
+Applied db\views.sql
+Load complete.
+```
 
-*LAX vs SNA row existence, ANC long_haul_pct, and SFO load_factor/delay_rate checks require
-`bts_t100`/`bts_ontime` loaded - pending sections 2-3.*
+All required sanity checks run live against the loaded database and PASS:
+
+- **New England join** (`airports JOIN regions ON state`, `WHERE region = 'new_england'`): **24
+  airports**, including all 6 named in the exam brief (BOS, BDL, PVD, MHT, BGR, BTV).
+- **LAX vs SNA rows exist** in both `v_airport_metrics` and `v_congestion`, all 3 years each.
+  Real, plausible numbers: LAX 2025 - 36.7M passengers, 81.7% load factor, 48.3% long-haul
+  departures, 18.8% delay rate. SNA 2025 - 5.5M passengers, 79.9% load factor, **only 13.1%
+  long-haul** - consistent with SNA's well-known historical noise-ordinance flight-length/slot
+  restrictions, a real-world cross-check that the data and long-haul definition behave sensibly.
+- **ANC long_haul_pct plausible**: 14.0% (2023) -> 14.5% (2024) -> 18.5% (2025), all non-null,
+  reasonable for a passenger-only (CLASS=F) view of a cargo-dominant airport.
+- **SFO load_factor + delay_rate populated**: load factor 82-83% across all 3 years; delay rate
+  22.9% (2023) -> 29.8% (2024) -> 24.1% (2025) with 16.7-21.0 min average delay - consistent with
+  SFO's well-documented weather-driven congestion.
+- **`v_opportunity_score`**: 225 airports scored (>=100k annual passengers, latest year = 2025).
+  New England spread is internally coherent: Bangor (BGR) top-ranked at 68.4 (high growth +
+  high infra-constraint - a small, growing, physically limited field); Worcester (ORH) lowest at
+  18.3 (very low congestion component - genuinely underused capacity, a real "not yet" signal
+  rather than a scoring artifact).
+- **`v_unmet_demand_est`** for SFO: ~1.4-1.7M estimated unmet passengers/year across 2023-2025,
+  `driver_load_factor` ~82-83% (the dominant term, well above the 0.80 threshold),
+  `driver_growth_gap` slightly negative in 2024/2025 (seat growth outpaced passenger growth those
+  years, correctly floored to contribute ~0 rather than a negative estimate) - the three driver
+  columns make the estimate auditable exactly as intended, not a black-box number.
+
+No blockers, no silent failures. All 4 exam-question-relevant checks the command center specified
+(LAX/SNA, ANC, SFO, New England) pass against real data end to end.
