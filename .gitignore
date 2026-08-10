@@ -1,0 +1,22 @@
+# Secrets - never committed
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*
+service-account*.json
+
+# Exam brief - Deloitte IP, kept local only (decision F1)
+docs/FDE-Exam-2.pdf
+
+# Scratch / caches
+_tmp/
+data/cache/
+__pycache__/
+*.pyc
+node_modules/
+.next/
+.vercel/
+.venv/
+*.log
