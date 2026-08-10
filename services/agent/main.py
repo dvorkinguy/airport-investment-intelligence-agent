@@ -266,6 +266,28 @@ def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
 
 
+#: Shown when the graph completes without producing any prose. Says what happened
+#: and what to do; it never invents an analysis.
+EMPTY_ANSWER_FALLBACK = (
+    "I could not produce an answer for this question - please ask again."
+)
+
+
+def _final_answer(parts: list[str], whole_message: str, thread_id: str) -> str:
+    """Never hand back an empty answer.
+
+    A completed run with no prose is always a defect on our side - the thread-wide
+    tool-cap bug produced exactly this - and a blank bubble gives the user nothing
+    to act on and leaves no signal in the logs. Substitute honest text and log it
+    loudly so the next occurrence is findable by thread.
+    """
+    answer = ("".join(parts) or whole_message).strip()
+    if answer:
+        return answer
+    log.warning("graph produced an empty answer", extra={"thread_id": thread_id})
+    return EMPTY_ANSWER_FALLBACK
+
+
 async def _events(
     rt: Runtime,
     message: str,
@@ -287,6 +309,7 @@ async def _events(
     final_message = ""
     started = time.perf_counter()
     failure: str | None = None
+    answer = ""
 
     yield {"type": "start", "thread_id": thread_id}
     with rt.tracing.request(
@@ -311,20 +334,23 @@ async def _events(
                         continue
                     yield event
 
+            answer = _final_answer(answer_parts, final_message, thread_id)
             if assumptions:
                 yield {"type": "assumptions", "items": assumptions}
             yield {
                 "type": "done",
                 "thread_id": thread_id,
                 "tools_used": tools_used,
-                "answer": "".join(answer_parts) or final_message,
+                "answer": answer,
                 "assumptions": assumptions,
             }
         except BaseException as exc:  # includes timeouts and client disconnects
             failure = f"{type(exc).__name__}: {exc}"
             raise
         finally:
-            answer = "".join(answer_parts) or final_message
+            # On the error path `done` never ran, so keep whatever prose arrived
+            # before the failure rather than pretending the turn completed.
+            answer = answer or "".join(answer_parts) or final_message
             span.update(
                 output={"answer": answer, "assumptions": assumptions},
                 metadata={"tools_used": tools_used, "data_backend": rt.backend},

@@ -115,3 +115,48 @@ def test_chat_is_unavailable_without_an_llm_key(
 
 def test_auth_dependency_is_open_until_clerk_is_enabled(client: TestClient) -> None:
     assert client.post("/chat", json={"message": "hi", "stream": False}).status_code == 200
+
+
+# --- The empty-answer guard ----------------------------------------------
+
+
+@pytest.fixture
+def silent_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """A model that completes the turn saying nothing at all."""
+    monkeypatch.setattr(
+        "agent.graph.build_llm",
+        lambda settings=None: ScriptedChatModel(responses=[AIMessage(content="   ")]),
+    )
+    from agent.main import app
+
+    with TestClient(app) as c:
+        yield c
+
+
+def test_a_blank_answer_is_replaced_with_honest_text(silent_client: TestClient) -> None:
+    """A blank bubble tells the user nothing and hides the defect from the log."""
+    from agent.main import EMPTY_ANSWER_FALLBACK
+
+    body = silent_client.post(
+        "/chat", json={"message": "anything", "stream": False}
+    ).json()
+    assert body["answer"] == EMPTY_ANSWER_FALLBACK
+
+
+def test_the_stream_never_ends_on_an_empty_done(silent_client: TestClient) -> None:
+    from agent.main import EMPTY_ANSWER_FALLBACK
+
+    with silent_client.stream("POST", "/chat", json={"message": "anything"}) as resp:
+        events = sse_events("".join(resp.iter_text()))
+    done = next(e for e in events if e["type"] == "done")
+    assert done["answer"] == EMPTY_ANSWER_FALLBACK
+
+
+def test_a_real_answer_is_left_alone(client: TestClient) -> None:
+    from agent.main import EMPTY_ANSWER_FALLBACK
+
+    body = client.post(
+        "/chat", json={"message": "Best New England candidates?", "stream": False}
+    ).json()
+    assert body["answer"] != EMPTY_ANSWER_FALLBACK
+    assert "Boston Logan" in body["answer"]

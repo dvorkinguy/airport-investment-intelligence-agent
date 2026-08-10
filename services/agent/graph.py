@@ -18,7 +18,7 @@ import asyncio
 from typing import Any, Literal
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 
@@ -63,12 +63,26 @@ def build_llm(settings: Settings | None = None) -> BaseChatModel:
 
 
 def _tool_rounds(state: AgentState) -> int:
-    """How many times the model has already asked for tools this thread."""
-    return sum(
-        1
-        for m in state["messages"]
-        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
-    )
+    """How many times the model has asked for tools **in the current turn**.
+
+    Counting the whole thread instead was a live outage. ``state["messages"]`` is
+    the entire checkpointed conversation, so the rounds spent answering earlier
+    questions kept accumulating: by the fourth question in one chat the running
+    total passed ``max_tool_iterations``, every later turn started already capped,
+    and the model answered with no tools at all - empty responses in about two
+    seconds, with `tools_used: []` in the queries table and in Langfuse. Evals
+    never saw it because each case runs on a fresh thread.
+
+    So: walk backwards and stop at the newest HumanMessage. The cap is per turn,
+    which is what the README always claimed it was.
+    """
+    rounds = 0
+    for m in reversed(state["messages"]):
+        if isinstance(m, HumanMessage):
+            break
+        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+            rounds += 1
+    return rounds
 
 
 def build_graph(

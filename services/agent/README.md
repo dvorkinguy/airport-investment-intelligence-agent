@@ -150,7 +150,7 @@ is a good investment.
 | `AGENT_MODEL` | `openai/gpt-4o-mini` | Any OpenRouter tool-calling model. Evals verified green on `openai/gpt-4o-mini` and `anthropic/claude-sonnet-4.5`. |
 | `DATABASE_URL` | - | Absent -> fixture backend + in-memory checkpoints. |
 | `REPO_BACKEND` | `auto` | Force `postgres` or `fixture`. |
-| `MAX_TOOL_ITERATIONS` | `8` | Past the cap the model answers without tools, so a turn always ends in prose. |
+| `MAX_TOOL_ITERATIONS` | `8` | Tool rounds allowed **per turn**, counted from the newest user message - not across the thread. Past the cap the model answers without tools, so a turn always ends in prose. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Whole-request ceiling. |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | JSON list. A web UI on any other port or domain is blocked by the browser preflight and shows only "backend not connected" - add its origin here. |
 | `LOG_JSON` | `true` | `false` for readable local logs. |
