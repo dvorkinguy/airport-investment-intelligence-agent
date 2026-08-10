@@ -52,13 +52,76 @@ export function parseNumericCell(value: string): number {
   return Number(value.replace(/[$,%]/g, ""));
 }
 
-/** First column where every row's value looks numeric, or -1 if none. */
-export function findNumericColumn(headers: string[], rows: string[][]): number {
-  if (rows.length === 0) return -1;
+const YEAR_HEADER_RE = /^(year|fy|date)$/i;
+const RANK_HEADER_RE = /^(rank|#|no\.?)$/i;
+
+function columnValues(rows: string[][], col: number): string[] {
+  return rows.map((row) => row[col] ?? "");
+}
+
+/** Header says "year", or every value is a bare integer in [1900, 2100]. */
+function isYearLikeColumn(header: string, values: string[]): boolean {
+  if (YEAR_HEADER_RE.test(header.trim())) return true;
+  return values.every((v) => {
+    if (!/^\d{4}$/.test(v.trim())) return false;
+    const n = Number(v);
+    return n >= 1900 && n <= 2100;
+  });
+}
+
+/** Header says "rank", or every value equals its 1-indexed row position. */
+function isRankLikeColumn(header: string, values: string[]): boolean {
+  if (RANK_HEADER_RE.test(header.trim())) return true;
+  return values.every((v, i) => isNumericCell(v) && parseNumericCell(v) === i + 1);
+}
+
+export interface ChartColumns {
+  /** Bar height. -1 if no eligible metric column exists. */
+  metricCol: number;
+  /** Bar identifier (first non-metric, non-year, non-rank column). */
+  labelCol: number;
+  /** Present when a year/date column exists, so labels can disambiguate a repeated identifier - "LAX 2025". -1 otherwise. */
+  yearCol: number;
+}
+
+/**
+ * Picks which columns feed the auto-chart. Year and rank columns are
+ * numeric-looking but meaningless as a bar height (a "Year" or "Rank"
+ * column charted as the metric produces a staircase, not an answer) - they
+ * are excluded from metric selection even though they'd otherwise pass a
+ * plain numeric check. A column named "Score" wins if present; otherwise
+ * the first remaining numeric column.
+ */
+export function findChartColumns(headers: string[], rows: string[][]): ChartColumns {
+  if (rows.length === 0 || headers.length === 0) return { metricCol: -1, labelCol: -1, yearCol: -1 };
+
+  let yearCol = -1;
+  let rankCol = -1;
+  const metricCandidates: number[] = [];
+
   for (let col = 0; col < headers.length; col++) {
-    if (rows.every((row) => isNumericCell(row[col] ?? ""))) return col;
+    const values = columnValues(rows, col);
+    if (!values.every((v) => isNumericCell(v))) continue;
+    if (yearCol === -1 && isYearLikeColumn(headers[col] ?? "", values)) {
+      yearCol = col;
+      continue;
+    }
+    if (rankCol === -1 && isRankLikeColumn(headers[col] ?? "", values)) {
+      rankCol = col;
+      continue;
+    }
+    metricCandidates.push(col);
   }
-  return -1;
+
+  if (metricCandidates.length === 0) return { metricCol: -1, labelCol: -1, yearCol };
+
+  const scoreCol = metricCandidates.find((col) => /^score$/i.test((headers[col] ?? "").trim()));
+  const metricCol = scoreCol ?? metricCandidates[0];
+
+  const excluded = new Set([metricCol, yearCol, rankCol]);
+  const labelCol = headers.findIndex((_, col) => !excluded.has(col));
+
+  return { metricCol, labelCol: labelCol === -1 ? 0 : labelCol, yearCol };
 }
 
 function escapeCsv(value: string): string {

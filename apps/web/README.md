@@ -86,4 +86,3 @@ URL intentionally pointed at a dead port - see `playwright.config.ts`):
 
 - PostHog analytics
 - Deployed backend URL (currently points at `localhost:8000` by default)
-- Custom Clerk sign-in/sign-up pages (uses Clerk's default hosted flow)
