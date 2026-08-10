@@ -37,8 +37,15 @@ class Settings(BaseSettings):
     # --- Data plane ---
     database_url: SecretStr | None = None
     db_statement_timeout_ms: int = 15_000
-    db_pool_min_size: int = 1
-    db_pool_max_size: int = 5
+    # min_size 0 on purpose: Neon's free tier suspends when idle and kills the
+    # connection, and psycopg only prunes idle connections ABOVE min_size - a
+    # non-zero minimum pins exactly the connection that goes stale. Pools stay
+    # small because the free tier has a low connection cap. See agent/db.py.
+    db_pool_min_size: int = 0
+    db_pool_max_size: int = 3
+    db_write_pool_max_size: int = 3
+    db_pool_max_idle_seconds: float = 30.0
+    db_pool_max_lifetime_seconds: float = 300.0
 
     # Which repository backs the tools. ``auto`` = postgres when DATABASE_URL is
     # set, fixtures otherwise (keeps tests/evals runnable with no database).

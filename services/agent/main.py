@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from agent import __version__
 from agent.auth import ANONYMOUS, Principal, current_principal
+from agent.db import build_pool, pool_stats
 from agent.graph import build_graph
 from agent.logging_config import bind, clear, configure, get_logger
 from agent.observability import Tracing, build_tracing
@@ -67,6 +68,7 @@ class Runtime:
     tracing: Tracing = field(default_factory=lambda: Tracing(None))
     query_log: QueryLog = field(default_factory=lambda: QueryLog(None))
     queries_ready: bool = False
+    write_pool: Any | None = None
 
 
 # --- Boot ----------------------------------------------------------------
@@ -79,6 +81,8 @@ async def _build_repo(s: Settings) -> tuple[AirportRepo, str]:
             min_size=s.db_pool_min_size,
             max_size=s.db_pool_max_size,
             statement_timeout_ms=s.db_statement_timeout_ms,
+            max_idle_seconds=s.db_pool_max_idle_seconds,
+            max_lifetime_seconds=s.db_pool_max_lifetime_seconds,
         )
         await repo.open()
         return repo, "postgres"
@@ -96,17 +100,15 @@ async def _build_write_pool(s: Settings) -> Any | None:
     if not s.database_dsn:
         return None
     try:
-        from psycopg.rows import dict_row
-        from psycopg_pool import AsyncConnectionPool
-
-        pool = AsyncConnectionPool(
-            conninfo=s.database_dsn,
-            min_size=1,
-            max_size=3,
-            open=False,
-            kwargs={"autocommit": True, "row_factory": dict_row, "prepare_threshold": None},
+        pool = build_pool(
+            s.database_dsn,
+            autocommit=True,
+            min_size=0,
+            max_size=s.db_write_pool_max_size,
+            max_idle_seconds=s.db_pool_max_idle_seconds,
+            max_lifetime_seconds=s.db_pool_max_lifetime_seconds,
         )
-        await pool.open(wait=True, timeout=15)
+        await pool.open(wait=True, timeout=20)
         return pool
     except Exception:
         log.exception("write pool unavailable")
@@ -120,9 +122,9 @@ async def _build_checkpointer(s: Settings, pool: Any | None) -> tuple[Any, str]:
     if pool is None:
         return MemorySaver(), "memory"
     try:
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from agent.checkpointer import ResilientAsyncPostgresSaver
 
-        saver = AsyncPostgresSaver(pool)
+        saver = ResilientAsyncPostgresSaver(pool)
         await saver.setup()
         return saver, "postgres"
     except Exception:
@@ -160,6 +162,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tracing=tracing,
         query_log=query_log,
         queries_ready=queries_ready,
+        write_pool=write_pool,
     )
     log.info(
         "service ready",
@@ -223,6 +226,10 @@ async def health(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
         "tracing": rt.tracing.enabled,
         "tracing_environment": rt.tracing.environment if rt.tracing.enabled else None,
         "query_log": rt.queries_ready,
+        "pools": {
+            "read": rt.repo.stats() if hasattr(rt.repo, "stats") else {},
+            "write": pool_stats(rt.write_pool),
+        },
         "stubs": {"clerk_auth": not rt.settings.clerk_auth_enabled},
     }
     return JSONResponse(body, status_code=200 if db_ok else 503)

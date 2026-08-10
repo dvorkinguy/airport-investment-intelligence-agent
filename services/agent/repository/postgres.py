@@ -16,9 +16,8 @@ from decimal import Decimal
 from typing import Any
 
 import psycopg
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
 
+from agent.db import build_pool, pool_stats, with_stale_retry
 from agent.logging_config import get_logger
 from agent.repository.base import (
     SUPPORTED_METRICS,
@@ -114,23 +113,20 @@ class PostgresRepo:
         self,
         dsn: str,
         *,
-        min_size: int = 1,
-        max_size: int = 5,
+        min_size: int = 0,
+        max_size: int = 3,
         statement_timeout_ms: int = 15_000,
+        max_idle_seconds: float = 30.0,
+        max_lifetime_seconds: float = 300.0,
     ) -> None:
         self._statement_timeout_ms = int(statement_timeout_ms)
-        self._pool = AsyncConnectionPool(
-            conninfo=dsn,
+        self._pool = build_pool(
+            dsn,
+            autocommit=False,
             min_size=min_size,
             max_size=max_size,
-            open=False,
-            kwargs={
-                "row_factory": dict_row,
-                "autocommit": False,
-                # Neon's pooled endpoint runs pgbouncer; server-side prepared
-                # statements must stay off.
-                "prepare_threshold": None,
-            },
+            max_idle_seconds=max_idle_seconds,
+            max_lifetime_seconds=max_lifetime_seconds,
         )
 
     async def open(self) -> None:
@@ -142,20 +138,26 @@ class PostgresRepo:
 
     # --- Core execution ---------------------------------------------------
 
+    async def _run_select(self, sql: str, params: dict[str, Any]) -> list[Row]:
+        async with self._pool.connection() as conn:
+            async with conn.transaction():
+                async with conn.cursor() as cur:
+                    await cur.execute("SET TRANSACTION READ ONLY")
+                    await cur.execute(
+                        f"SET LOCAL statement_timeout = {self._statement_timeout_ms}"
+                    )
+                    await cur.execute(sql, params)
+                    return [
+                        {k: coerce_numeric(v) for k, v in row.items()}
+                        for row in await cur.fetchall()
+                    ]
+
     async def _select(self, sql: str, params: dict[str, Any]) -> list[Row]:
         try:
-            async with self._pool.connection() as conn:
-                async with conn.transaction():
-                    async with conn.cursor() as cur:
-                        await cur.execute("SET TRANSACTION READ ONLY")
-                        await cur.execute(
-                            f"SET LOCAL statement_timeout = {self._statement_timeout_ms}"
-                        )
-                        await cur.execute(sql, params)
-                        return [
-                            {k: coerce_numeric(v) for k, v in row.items()}
-                            for row in await cur.fetchall()
-                        ]
+            # Read-only and side-effect free, so a retry is always safe.
+            return await with_stale_retry(
+                lambda: self._run_select(sql, params), what="repo.select"
+            )
         except psycopg.errors.UndefinedTable as exc:
             raise RepoError(
                 f"required table/view is not present in the database: {exc}"
@@ -230,3 +232,6 @@ class PostgresRepo:
     async def ping(self) -> bool:
         await self._select("SELECT 1 AS ok", {})
         return True
+
+    def stats(self) -> dict[str, Any]:
+        return pool_stats(self._pool)
