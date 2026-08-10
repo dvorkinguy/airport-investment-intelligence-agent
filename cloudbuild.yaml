@@ -1,0 +1,32 @@
+# Cloud Build for the agent image.
+#
+# Exists because `gcloud run deploy --source` gives no way to pass --build-arg,
+# and the image's OCI revision label is a build arg. Build here, deploy the
+# resulting tag.
+#
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_GIT_SHA=$(git rev-parse --short=12 HEAD),_IMAGE=<repo>/airport-agent:<tag>
+#
+# Kaniko/buildkit are deliberately not used: the Dockerfile's own layer split
+# (deps, then code) already gives the cache behaviour we want, and the plain
+# docker builder is one less moving part.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - GIT_SHA=${_GIT_SHA}
+      - -t
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _GIT_SHA: dev
+  _IMAGE: europe-west3-docker.pkg.dev/airport-intel-agent/airport-agent/airport-agent:latest
+
+options:
+  # The project has no legacy build bucket; log to Cloud Logging only.
+  logging: CLOUD_LOGGING_ONLY
