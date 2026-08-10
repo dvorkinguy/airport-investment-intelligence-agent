@@ -97,6 +97,40 @@ async def test_unknown_airport_returns_an_instruction_not_to_guess(
     assert msg.artifact["ok"] is False
 
 
+async def test_failure_payloads_still_carry_the_vintage(tools: dict[str, Any]) -> None:
+    """Without one, a model fills the gap with its own training cutoff."""
+    for name, args in (
+        ("airport_metrics", {"iata": "ZZZ"}),
+        ("unmet_demand_estimate", {"iata": "ZZZ"}),
+        ("compare_airports", {"a": "LAX", "b": "ZZZ"}),
+        ("rank_airports", {"region": "narnia"}),
+        ("resolve_airport", {"query": "Atlantis"}),
+    ):
+        payload = json.loads((await call(tools[name], **args)).content)
+        assert "error" in payload, name
+        assert any("2022-2024" in a for a in payload["assumptions"]), name
+        assert "not in this payload" in payload["instruction"], name
+
+
 async def test_unsupported_metric_is_refused(tools: dict[str, Any]) -> None:
     msg = await call(tools["rank_airports"], region="new_england", metric="roi")
     assert "not available" in json.loads(msg.content)["error"]
+
+
+async def test_empty_dataset_says_vintage_unknown_rather_than_none(
+    repo: FixtureRepo,
+) -> None:
+    """A vintage rendered "None-None" reads as a broken field and gets replaced
+    by the model's own training cutoff. It has to say UNKNOWN in words."""
+
+    class EmptyVintageRepo(FixtureRepo):
+        async def data_vintage(self) -> dict[str, Any]:
+            return {"source": "empty", "first_year": None, "last_year": None,
+                    "airports": 0, "backend": "postgres"}
+
+    tools = {t.name: t for t in build_tools(EmptyVintageRepo())}
+    payload = json.loads((await call(tools["resolve_airport"], query="BOS")).content)
+    joined = " ".join(payload["assumptions"])
+    assert "None-None" not in joined
+    assert "vintage is UNKNOWN" in joined
+    assert "do not name a year" in joined.lower()

@@ -57,25 +57,34 @@ A_RANK_SCOPE = (
     "Ranking covers only airports present in the dataset; an airport with no BTS rows "
     "cannot appear and its absence is not evidence against it."
 )
+A_NO_VINTAGE = (
+    "The dataset holds no yearly rows yet, so its data vintage is UNKNOWN. State that "
+    "the vintage is unknown; do not name a year, a cutoff or an 'as of' date."
+)
 
 
 def _dump(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
-def _error(tool_name: str, message: str) -> tuple[str, dict[str, Any]]:
+def _error(
+    tool_name: str, message: str, assumptions: list[str] | None = None
+) -> tuple[str, dict[str, Any]]:
     log.warning("tool failed", extra={"tool": tool_name, "error": message})
+    assumptions = assumptions or []
     return (
         _dump(
             {
                 "error": message,
                 "instruction": (
-                    "Tell the user this figure is unavailable and why. "
-                    "Do not substitute an estimate or a remembered number."
+                    "Tell the user this figure is unavailable and why. Do not "
+                    "substitute an estimate or a remembered number, and do not "
+                    "state a data vintage that is not in this payload."
                 ),
+                "assumptions": assumptions,
             }
         ),
-        {"tool": tool_name, "ok": False, "assumptions": [], "error": message},
+        {"tool": tool_name, "ok": False, "assumptions": assumptions, "error": message},
     )
 
 
@@ -91,11 +100,26 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
 
     async def _vintage_line() -> tuple[str, dict[str, Any]]:
         v = await repo.data_vintage()
-        return A_VINTAGE.format(
-            first_year=v.get("first_year"),
-            last_year=v.get("last_year"),
-            source=v.get("source"),
-        ), v
+        first, last = v.get("first_year"), v.get("last_year")
+        if first is None or last is None:
+            # A vintage rendered as "None-None" is worse than no vintage: it reads
+            # as a broken field, and the model quietly replaces it with its own
+            # training cutoff. Say "unknown" out loud instead.
+            return A_NO_VINTAGE, v
+        return A_VINTAGE.format(first_year=first, last_year=last, source=v.get("source")), v
+
+    async def _fail(tool_name: str, message: str) -> tuple[str, dict[str, Any]]:
+        """Failure payloads still carry the vintage.
+
+        Left with no vintage, a model fills the gap from memory - an earlier run
+        answered "the data is current as of October 2023", which was its own
+        training cutoff, not this dataset.
+        """
+        try:
+            vintage, _ = await _vintage_line()
+            return _error(tool_name, message, [vintage])
+        except Exception:
+            return _error(tool_name, message, ["The data vintage could not be read."])
 
     async def _coerce_iata(value: str) -> str:
         """Accept a code or a place name; return a dataset IATA code."""
@@ -121,9 +145,9 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
         try:
             rows = await repo.resolve_airport(query, limit=5)
         except RepoError as exc:
-            return _error("resolve_airport", str(exc))
+            return await _fail("resolve_airport", str(exc))
         if not rows:
-            return _error("resolve_airport", f"no airport in the dataset matches '{query}'")
+            return await _fail("resolve_airport", f"no airport in the dataset matches '{query}'")
         vintage, _ = await _vintage_line()
         return _ok(
             "resolve_airport",
@@ -156,9 +180,9 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
                 region=region, states=states, metric=metric, limit=limit
             )
         except RepoError as exc:
-            return _error("rank_airports", str(exc))
+            return await _fail("rank_airports", str(exc))
         if not rows:
-            return _error(
+            return await _fail(
                 "rank_airports",
                 f"no scored airports found for region={region!r} states={states!r}",
             )
@@ -194,7 +218,7 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
             code = await _coerce_iata(iata)
             rows = await repo.airport_metrics(code, years=years)
         except RepoError as exc:
-            return _error("airport_metrics", str(exc))
+            return await _fail("airport_metrics", str(exc))
         vintage, _ = await _vintage_line()
         return _ok(
             "airport_metrics",
@@ -227,7 +251,7 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
                     log.warning("no congestion rows", extra={"iata": code, "error": str(exc)})
                 side[code] = {"metrics": metrics, "congestion": congestion}
         except RepoError as exc:
-            return _error("compare_airports", str(exc))
+            return await _fail("compare_airports", str(exc))
         vintage, _ = await _vintage_line()
         return _ok(
             "compare_airports",
@@ -257,7 +281,7 @@ def build_tools(repo: AirportRepo) -> list[BaseTool]:
             except RepoError:
                 context_congestion = []
         except RepoError as exc:
-            return _error("unmet_demand_estimate", str(exc))
+            return await _fail("unmet_demand_estimate", str(exc))
         vintage, _ = await _vintage_line()
         return _ok(
             "unmet_demand_estimate",
