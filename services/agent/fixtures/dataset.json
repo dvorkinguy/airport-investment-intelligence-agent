@@ -1,0 +1,161 @@
+{
+  "_meta": {
+    "purpose": "Offline fixture for tests and evals. Mirrors the Neon data contract table-for-table and column-for-column.",
+    "warning": "SYNTHETIC. Magnitudes are BTS-shaped and plausible but these are NOT the real published figures. Never quote a number from this file as an analysis result - the production answer comes from PostgresRepo.",
+    "vintage": {
+      "source": "synthetic fixture (BTS T-100 + on-time shaped)",
+      "first_year": 2022,
+      "last_year": 2024,
+      "long_haul_threshold_miles": 1500
+    }
+  },
+
+  "airports": [
+    {"iata": "BOS", "icao": "KBOS", "name": "Boston Logan International", "city": "Boston", "state": "MA", "lat": 42.3656, "lon": -71.0096, "runways_count": 6, "max_runway_length_ft": 10083},
+    {"iata": "BDL", "icao": "KBDL", "name": "Bradley International", "city": "Windsor Locks", "state": "CT", "lat": 41.9389, "lon": -72.6832, "runways_count": 2, "max_runway_length_ft": 9510},
+    {"iata": "PVD", "icao": "KPVD", "name": "Rhode Island T.F. Green International", "city": "Providence", "state": "RI", "lat": 41.7267, "lon": -71.4325, "runways_count": 2, "max_runway_length_ft": 8700},
+    {"iata": "MHT", "icao": "KMHT", "name": "Manchester-Boston Regional", "city": "Manchester", "state": "NH", "lat": 42.9326, "lon": -71.4357, "runways_count": 2, "max_runway_length_ft": 9250},
+    {"iata": "PWM", "icao": "KPWM", "name": "Portland International Jetport", "city": "Portland", "state": "ME", "lat": 43.6462, "lon": -70.3093, "runways_count": 2, "max_runway_length_ft": 7200},
+    {"iata": "BTV", "icao": "KBTV", "name": "Burlington International", "city": "Burlington", "state": "VT", "lat": 44.472, "lon": -73.1533, "runways_count": 2, "max_runway_length_ft": 8320},
+    {"iata": "BGR", "icao": "KBGR", "name": "Bangor International", "city": "Bangor", "state": "ME", "lat": 44.8074, "lon": -68.8281, "runways_count": 1, "max_runway_length_ft": 11440},
+    {"iata": "LAX", "icao": "KLAX", "name": "Los Angeles International", "city": "Los Angeles", "state": "CA", "lat": 33.9425, "lon": -118.4081, "runways_count": 4, "max_runway_length_ft": 12091},
+    {"iata": "SNA", "icao": "KSNA", "name": "John Wayne Airport, Orange County", "city": "Santa Ana", "state": "CA", "lat": 33.6757, "lon": -117.8682, "runways_count": 2, "max_runway_length_ft": 5701},
+    {"iata": "ANC", "icao": "PANC", "name": "Ted Stevens Anchorage International", "city": "Anchorage", "state": "AK", "lat": 61.1743, "lon": -149.9982, "runways_count": 3, "max_runway_length_ft": 12400},
+    {"iata": "SFO", "icao": "KSFO", "name": "San Francisco International", "city": "San Francisco", "state": "CA", "lat": 37.6188, "lon": -122.375, "runways_count": 4, "max_runway_length_ft": 11870}
+  ],
+
+  "regions": [
+    {"state": "CT", "region": "new_england"},
+    {"state": "ME", "region": "new_england"},
+    {"state": "MA", "region": "new_england"},
+    {"state": "NH", "region": "new_england"},
+    {"state": "RI", "region": "new_england"},
+    {"state": "VT", "region": "new_england"},
+    {"state": "AK", "region": "pacific"},
+    {"state": "CA", "region": "pacific"},
+    {"state": "HI", "region": "pacific"},
+    {"state": "OR", "region": "pacific"},
+    {"state": "WA", "region": "pacific"}
+  ],
+
+  "v_airport_metrics": [
+    {"iata": "BOS", "year": 2024, "passengers": 43500000, "seats": 52400000, "departures": 348000, "load_factor": 0.8302, "long_haul_pct": 0.212, "pax_growth_yoy": 0.0533, "seat_growth_yoy": 0.0356, "flight_growth_yoy": 0.0235},
+    {"iata": "BOS", "year": 2023, "passengers": 41300000, "seats": 50600000, "departures": 340000, "load_factor": 0.8162, "long_haul_pct": 0.205, "pax_growth_yoy": 0.1223, "seat_growth_yoy": 0.0789, "flight_growth_yoy": 0.0559},
+    {"iata": "BOS", "year": 2022, "passengers": 36800000, "seats": 46900000, "departures": 322000, "load_factor": 0.7846, "long_haul_pct": 0.191, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "BDL", "year": 2024, "passengers": 6600000, "seats": 8180000, "departures": 56000, "load_factor": 0.8068, "long_haul_pct": 0.041, "pax_growth_yoy": 0.0476, "seat_growth_yoy": 0.0289, "flight_growth_yoy": 0.0182},
+    {"iata": "BDL", "year": 2023, "passengers": 6300000, "seats": 7950000, "departures": 55000, "load_factor": 0.7925, "long_haul_pct": 0.038, "pax_growth_yoy": 0.1053, "seat_growth_yoy": 0.0628, "flight_growth_yoy": 0.0476},
+    {"iata": "BDL", "year": 2022, "passengers": 5700000, "seats": 7480000, "departures": 52500, "load_factor": 0.762, "long_haul_pct": 0.033, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "PVD", "year": 2024, "passengers": 4300000, "seats": 5240000, "departures": 38500, "load_factor": 0.8206, "long_haul_pct": 0.012, "pax_growth_yoy": 0.0886, "seat_growth_yoy": 0.0586, "flight_growth_yoy": 0.0349},
+    {"iata": "PVD", "year": 2023, "passengers": 3950000, "seats": 4950000, "departures": 37200, "load_factor": 0.798, "long_haul_pct": 0.01, "pax_growth_yoy": 0.1449, "seat_growth_yoy": 0.0903, "flight_growth_yoy": 0.0508},
+    {"iata": "PVD", "year": 2022, "passengers": 3450000, "seats": 4540000, "departures": 35400, "load_factor": 0.7599, "long_haul_pct": 0.008, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "MHT", "year": 2024, "passengers": 1850000, "seats": 2300000, "departures": 18600, "load_factor": 0.8043, "long_haul_pct": 0.0, "pax_growth_yoy": 0.0756, "seat_growth_yoy": 0.0502, "flight_growth_yoy": 0.0276},
+    {"iata": "MHT", "year": 2023, "passengers": 1720000, "seats": 2190000, "departures": 18100, "load_factor": 0.7854, "long_haul_pct": 0.0, "pax_growth_yoy": 0.1169, "seat_growth_yoy": 0.0683, "flight_growth_yoy": 0.0402},
+    {"iata": "MHT", "year": 2022, "passengers": 1540000, "seats": 2050000, "departures": 17400, "load_factor": 0.7512, "long_haul_pct": 0.0, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "PWM", "year": 2024, "passengers": 2350000, "seats": 2900000, "departures": 26300, "load_factor": 0.8103, "long_haul_pct": 0.0, "pax_growth_yoy": 0.078, "seat_growth_yoy": 0.0507, "flight_growth_yoy": 0.0314},
+    {"iata": "PWM", "year": 2023, "passengers": 2180000, "seats": 2760000, "departures": 25500, "load_factor": 0.7899, "long_haul_pct": 0.0, "pax_growth_yoy": 0.1122, "seat_growth_yoy": 0.0656, "flight_growth_yoy": 0.0366},
+    {"iata": "PWM", "year": 2022, "passengers": 1960000, "seats": 2590000, "departures": 24600, "load_factor": 0.7568, "long_haul_pct": 0.0, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "BTV", "year": 2024, "passengers": 1020000, "seats": 1290000, "departures": 14200, "load_factor": 0.7907, "long_haul_pct": 0.0, "pax_growth_yoy": 0.0625, "seat_growth_yoy": 0.0403, "flight_growth_yoy": 0.0216},
+    {"iata": "BTV", "year": 2023, "passengers": 960000, "seats": 1240000, "departures": 13900, "load_factor": 0.7742, "long_haul_pct": 0.0, "pax_growth_yoy": 0.1034, "seat_growth_yoy": 0.0598, "flight_growth_yoy": 0.0373},
+    {"iata": "BTV", "year": 2022, "passengers": 870000, "seats": 1170000, "departures": 13400, "load_factor": 0.7436, "long_haul_pct": 0.0, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "BGR", "year": 2024, "passengers": 560000, "seats": 730000, "departures": 9100, "load_factor": 0.7671, "long_haul_pct": 0.021, "pax_growth_yoy": 0.0667, "seat_growth_yoy": 0.058, "flight_growth_yoy": 0.0341},
+    {"iata": "BGR", "year": 2023, "passengers": 525000, "seats": 690000, "departures": 8800, "load_factor": 0.7609, "long_haul_pct": 0.02, "pax_growth_yoy": 0.0938, "seat_growth_yoy": 0.0781, "flight_growth_yoy": 0.0476},
+    {"iata": "BGR", "year": 2022, "passengers": 480000, "seats": 640000, "departures": 8400, "load_factor": 0.75, "long_haul_pct": 0.018, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "LAX", "year": 2024, "passengers": 76000000, "seats": 92700000, "departures": 570000, "load_factor": 0.8198, "long_haul_pct": 0.331, "pax_growth_yoy": 0.0133, "seat_growth_yoy": 0.0142, "flight_growth_yoy": 0.0071},
+    {"iata": "LAX", "year": 2023, "passengers": 75000000, "seats": 91400000, "departures": 566000, "load_factor": 0.8206, "long_haul_pct": 0.322, "pax_growth_yoy": 0.1381, "seat_growth_yoy": 0.0959, "flight_growth_yoy": 0.0679},
+    {"iata": "LAX", "year": 2022, "passengers": 65900000, "seats": 83400000, "departures": 530000, "load_factor": 0.7902, "long_haul_pct": 0.29, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "SNA", "year": 2024, "passengers": 11700000, "seats": 14050000, "departures": 92000, "load_factor": 0.8327, "long_haul_pct": 0.0, "pax_growth_yoy": 0.0446, "seat_growth_yoy": 0.0331, "flight_growth_yoy": 0.0166},
+    {"iata": "SNA", "year": 2023, "passengers": 11200000, "seats": 13600000, "departures": 90500, "load_factor": 0.8235, "long_haul_pct": 0.0, "pax_growth_yoy": 0.0874, "seat_growth_yoy": 0.0543, "flight_growth_yoy": 0.0331},
+    {"iata": "SNA", "year": 2022, "passengers": 10300000, "seats": 12900000, "departures": 87600, "load_factor": 0.7984, "long_haul_pct": 0.0, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "ANC", "year": 2024, "passengers": 2520000, "seats": 3290000, "departures": 39800, "load_factor": 0.766, "long_haul_pct": 0.463, "pax_growth_yoy": 0.0456, "seat_growth_yoy": 0.0313, "flight_growth_yoy": 0.0179},
+    {"iata": "ANC", "year": 2023, "passengers": 2410000, "seats": 3190000, "departures": 39100, "load_factor": 0.7555, "long_haul_pct": 0.451, "pax_growth_yoy": 0.057, "seat_growth_yoy": 0.0391, "flight_growth_yoy": 0.0236},
+    {"iata": "ANC", "year": 2022, "passengers": 2280000, "seats": 3070000, "departures": 38200, "load_factor": 0.7427, "long_haul_pct": 0.442, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null},
+
+    {"iata": "SFO", "year": 2024, "passengers": 45200000, "seats": 54100000, "departures": 372000, "load_factor": 0.8355, "long_haul_pct": 0.288, "pax_growth_yoy": 0.061, "seat_growth_yoy": 0.0424, "flight_growth_yoy": 0.0305},
+    {"iata": "SFO", "year": 2023, "passengers": 42600000, "seats": 51900000, "departures": 361000, "load_factor": 0.8208, "long_haul_pct": 0.277, "pax_growth_yoy": 0.1545, "seat_growth_yoy": 0.1113, "flight_growth_yoy": 0.0712},
+    {"iata": "SFO", "year": 2022, "passengers": 36900000, "seats": 46700000, "departures": 337000, "load_factor": 0.7901, "long_haul_pct": 0.251, "pax_growth_yoy": null, "seat_growth_yoy": null, "flight_growth_yoy": null}
+  ],
+
+  "v_congestion": [
+    {"iata": "BOS", "year": 2024, "delay_rate": 0.238, "avg_delay_min": 59.7},
+    {"iata": "BOS", "year": 2023, "delay_rate": 0.256, "avg_delay_min": 61.9},
+    {"iata": "BOS", "year": 2022, "delay_rate": 0.281, "avg_delay_min": 64.8},
+    {"iata": "BDL", "year": 2024, "delay_rate": 0.171, "avg_delay_min": 45.2},
+    {"iata": "BDL", "year": 2023, "delay_rate": 0.182, "avg_delay_min": 47.1},
+    {"iata": "BDL", "year": 2022, "delay_rate": 0.198, "avg_delay_min": 49.6},
+    {"iata": "PVD", "year": 2024, "delay_rate": 0.163, "avg_delay_min": 43.8},
+    {"iata": "PVD", "year": 2023, "delay_rate": 0.174, "avg_delay_min": 45.6},
+    {"iata": "PVD", "year": 2022, "delay_rate": 0.189, "avg_delay_min": 48.1},
+    {"iata": "MHT", "year": 2024, "delay_rate": 0.152, "avg_delay_min": 41.0},
+    {"iata": "MHT", "year": 2023, "delay_rate": 0.161, "avg_delay_min": 42.7},
+    {"iata": "MHT", "year": 2022, "delay_rate": 0.176, "avg_delay_min": 45.0},
+    {"iata": "PWM", "year": 2024, "delay_rate": 0.158, "avg_delay_min": 42.6},
+    {"iata": "PWM", "year": 2023, "delay_rate": 0.168, "avg_delay_min": 44.5},
+    {"iata": "PWM", "year": 2022, "delay_rate": 0.183, "avg_delay_min": 47.2},
+    {"iata": "BTV", "year": 2024, "delay_rate": 0.166, "avg_delay_min": 44.1},
+    {"iata": "BTV", "year": 2023, "delay_rate": 0.176, "avg_delay_min": 46.0},
+    {"iata": "BTV", "year": 2022, "delay_rate": 0.191, "avg_delay_min": 48.5},
+    {"iata": "BGR", "year": 2024, "delay_rate": 0.149, "avg_delay_min": 39.8},
+    {"iata": "BGR", "year": 2023, "delay_rate": 0.158, "avg_delay_min": 41.5},
+    {"iata": "BGR", "year": 2022, "delay_rate": 0.172, "avg_delay_min": 44.0},
+    {"iata": "LAX", "year": 2024, "delay_rate": 0.243, "avg_delay_min": 61.2},
+    {"iata": "LAX", "year": 2023, "delay_rate": 0.251, "avg_delay_min": 63.4},
+    {"iata": "LAX", "year": 2022, "delay_rate": 0.268, "avg_delay_min": 66.9},
+    {"iata": "SNA", "year": 2024, "delay_rate": 0.187, "avg_delay_min": 48.5},
+    {"iata": "SNA", "year": 2023, "delay_rate": 0.194, "avg_delay_min": 50.1},
+    {"iata": "SNA", "year": 2022, "delay_rate": 0.206, "avg_delay_min": 52.7},
+    {"iata": "ANC", "year": 2024, "delay_rate": 0.141, "avg_delay_min": 38.2},
+    {"iata": "ANC", "year": 2023, "delay_rate": 0.148, "avg_delay_min": 39.8},
+    {"iata": "ANC", "year": 2022, "delay_rate": 0.158, "avg_delay_min": 41.9},
+    {"iata": "SFO", "year": 2024, "delay_rate": 0.271, "avg_delay_min": 68.4},
+    {"iata": "SFO", "year": 2023, "delay_rate": 0.283, "avg_delay_min": 71.0},
+    {"iata": "SFO", "year": 2022, "delay_rate": 0.295, "avg_delay_min": 73.8}
+  ],
+
+  "v_opportunity_score": [
+    {"iata": "SFO", "score_0_100": 81.7, "c_pax_growth": 76.0, "c_load_factor": 85.0, "c_congestion": 90.0, "c_flight_growth": 69.0, "c_infra": 84.0},
+    {"iata": "BOS", "score_0_100": 78.4, "c_pax_growth": 68.0, "c_load_factor": 83.0, "c_congestion": 79.0, "c_flight_growth": 61.0, "c_infra": 88.0},
+    {"iata": "LAX", "score_0_100": 74.1, "c_pax_growth": 55.0, "c_load_factor": 82.0, "c_congestion": 82.0, "c_flight_growth": 52.0, "c_infra": 92.0},
+    {"iata": "PVD", "score_0_100": 71.6, "c_pax_growth": 79.0, "c_load_factor": 80.0, "c_congestion": 41.0, "c_flight_growth": 72.0, "c_infra": 55.0},
+    {"iata": "SNA", "score_0_100": 69.3, "c_pax_growth": 66.0, "c_load_factor": 85.0, "c_congestion": 62.0, "c_flight_growth": 58.0, "c_infra": 61.0},
+    {"iata": "BDL", "score_0_100": 68.9, "c_pax_growth": 74.0, "c_load_factor": 78.0, "c_congestion": 44.0, "c_flight_growth": 70.0, "c_infra": 58.0},
+    {"iata": "PWM", "score_0_100": 64.2, "c_pax_growth": 71.0, "c_load_factor": 79.0, "c_congestion": 43.0, "c_flight_growth": 66.0, "c_infra": 44.0},
+    {"iata": "MHT", "score_0_100": 61.5, "c_pax_growth": 69.0, "c_load_factor": 78.0, "c_congestion": 39.0, "c_flight_growth": 63.0, "c_infra": 41.0},
+    {"iata": "BTV", "score_0_100": 55.8, "c_pax_growth": 63.0, "c_load_factor": 76.0, "c_congestion": 42.0, "c_flight_growth": 58.0, "c_infra": 36.0},
+    {"iata": "ANC", "score_0_100": 52.6, "c_pax_growth": 57.0, "c_load_factor": 71.0, "c_congestion": 33.0, "c_flight_growth": 55.0, "c_infra": 74.0},
+    {"iata": "BGR", "score_0_100": 47.3, "c_pax_growth": 58.0, "c_load_factor": 73.0, "c_congestion": 35.0, "c_flight_growth": 61.0, "c_infra": 30.0}
+  ],
+
+  "v_unmet_demand_est": [
+    {"iata": "SFO", "year": 2024, "est_unmet_pax": 3180000, "driver_load_factor": 0.8355, "driver_growth_gap": 0.0186, "driver_delay_rate": 0.271},
+    {"iata": "SFO", "year": 2023, "est_unmet_pax": 2740000, "driver_load_factor": 0.8208, "driver_growth_gap": 0.0432, "driver_delay_rate": 0.283},
+    {"iata": "LAX", "year": 2024, "est_unmet_pax": 1760000, "driver_load_factor": 0.8198, "driver_growth_gap": -0.0009, "driver_delay_rate": 0.243},
+    {"iata": "LAX", "year": 2023, "est_unmet_pax": 3050000, "driver_load_factor": 0.8206, "driver_growth_gap": 0.0422, "driver_delay_rate": 0.251},
+    {"iata": "BOS", "year": 2024, "est_unmet_pax": 2050000, "driver_load_factor": 0.8302, "driver_growth_gap": 0.0177, "driver_delay_rate": 0.238},
+    {"iata": "BOS", "year": 2023, "est_unmet_pax": 2390000, "driver_load_factor": 0.8162, "driver_growth_gap": 0.0434, "driver_delay_rate": 0.256},
+    {"iata": "SNA", "year": 2024, "est_unmet_pax": 620000, "driver_load_factor": 0.8327, "driver_growth_gap": 0.0115, "driver_delay_rate": 0.187},
+    {"iata": "SNA", "year": 2023, "est_unmet_pax": 780000, "driver_load_factor": 0.8235, "driver_growth_gap": 0.0331, "driver_delay_rate": 0.194},
+    {"iata": "BDL", "year": 2024, "est_unmet_pax": 290000, "driver_load_factor": 0.8068, "driver_growth_gap": 0.0187, "driver_delay_rate": 0.171},
+    {"iata": "BDL", "year": 2023, "est_unmet_pax": 315000, "driver_load_factor": 0.7925, "driver_growth_gap": 0.0425, "driver_delay_rate": 0.182},
+    {"iata": "PVD", "year": 2024, "est_unmet_pax": 245000, "driver_load_factor": 0.8206, "driver_growth_gap": 0.03, "driver_delay_rate": 0.163},
+    {"iata": "PVD", "year": 2023, "est_unmet_pax": 210000, "driver_load_factor": 0.798, "driver_growth_gap": 0.0546, "driver_delay_rate": 0.174},
+    {"iata": "PWM", "year": 2024, "est_unmet_pax": 118000, "driver_load_factor": 0.8103, "driver_growth_gap": 0.0273, "driver_delay_rate": 0.158},
+    {"iata": "PWM", "year": 2023, "est_unmet_pax": 104000, "driver_load_factor": 0.7899, "driver_growth_gap": 0.0466, "driver_delay_rate": 0.168},
+    {"iata": "MHT", "year": 2024, "est_unmet_pax": 82000, "driver_load_factor": 0.8043, "driver_growth_gap": 0.0254, "driver_delay_rate": 0.152},
+    {"iata": "MHT", "year": 2023, "est_unmet_pax": 76000, "driver_load_factor": 0.7854, "driver_growth_gap": 0.0486, "driver_delay_rate": 0.161},
+    {"iata": "BTV", "year": 2024, "est_unmet_pax": 34000, "driver_load_factor": 0.7907, "driver_growth_gap": 0.0222, "driver_delay_rate": 0.166},
+    {"iata": "BTV", "year": 2023, "est_unmet_pax": 29000, "driver_load_factor": 0.7742, "driver_growth_gap": 0.0436, "driver_delay_rate": 0.176},
+    {"iata": "ANC", "year": 2024, "est_unmet_pax": 41000, "driver_load_factor": 0.766, "driver_growth_gap": 0.0143, "driver_delay_rate": 0.141},
+    {"iata": "ANC", "year": 2023, "est_unmet_pax": 37000, "driver_load_factor": 0.7555, "driver_growth_gap": 0.0179, "driver_delay_rate": 0.148},
+    {"iata": "BGR", "year": 2024, "est_unmet_pax": 9000, "driver_load_factor": 0.7671, "driver_growth_gap": 0.0087, "driver_delay_rate": 0.149},
+    {"iata": "BGR", "year": 2023, "est_unmet_pax": 8000, "driver_load_factor": 0.7609, "driver_growth_gap": 0.0157, "driver_delay_rate": 0.158}
+  ]
+}
