@@ -7,7 +7,7 @@ export function FollowUpChips({ items, onSelect }: { items: string[]; onSelect: 
           key={i}
           type="button"
           onClick={() => onSelect(item)}
-          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+          className="max-w-full break-words rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
         >
           {item}
         </button>

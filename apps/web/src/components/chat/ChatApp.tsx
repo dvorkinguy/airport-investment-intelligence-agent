@@ -206,7 +206,7 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
             key={q}
             type="button"
             onClick={() => onPick(q)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-emerald-300 hover:text-emerald-700"
+            className="max-w-full break-words rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-emerald-300 hover:text-emerald-700"
           >
             {q}
           </button>

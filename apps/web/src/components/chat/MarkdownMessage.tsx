@@ -50,7 +50,7 @@ const components: Components = {
 
 export function MarkdownMessage({ content }: { content: string }) {
   return (
-    <div className="max-w-none text-[0.95rem] text-slate-700">
+    <div className="max-w-none break-words text-[0.95rem] text-slate-700">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
