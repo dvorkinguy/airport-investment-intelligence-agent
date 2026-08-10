@@ -84,7 +84,9 @@
   #capBody{font-size:12px;line-height:1.62;color:var(--fg-dim)}
   #capBody code{font-family:var(--mono);font-size:11px;color:#a8c7ff;background:rgba(122,162,247,.10);padding:1px 4px;border-radius:4px}
   #capBar{height:2px;margin-top:9px;background:rgba(148,163,184,.16);border-radius:2px;overflow:hidden}
-  #capFill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width .12s linear}
+  /* scaleX, not width: this is driven every animation frame, and width would
+     put a layout pass on the critical path 60 times a second */
+  #capFill{height:100%;width:100%;transform:scaleX(0);transform-origin:left center;will-change:transform;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:transform .12s linear}
 
   /* ---------- info card ---------- */
   #info{
@@ -1099,7 +1101,7 @@ function advance (dt) {
   stepT += dt;
   const s = STEPS[stepIdx];
   const p = Math.min(1, stepT / stepDur);
-  capFill.style.width = (((stepIdx + p) / STEPS.length) * 100).toFixed(1) + '%';
+  capFill.style.transform = 'scaleX(' + ((stepIdx + p) / STEPS.length).toFixed(4) + ')';
 
   const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
   curCurve.getPoint(ease, packet.position);
@@ -1269,7 +1271,10 @@ function resize () {
 }
 window.addEventListener('resize', resize);
 
+// A slow first load can trip the CDN-timeout fallback before Three.js lands.
+// Booting successfully retracts it.
 window.__booted = true;
+document.getElementById('fallback').classList.remove('show');
 fitCamera();
 tick();
 </script>
