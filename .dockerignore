@@ -1,0 +1,36 @@
+# Keep secrets and bulk out of the build context entirely - anything listed here
+# cannot be baked into an image layer by accident.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*
+service-account*.json
+
+# Deloitte exam brief - local only (decision F1)
+docs/FDE-Exam-2.pdf
+_command-center.md
+
+# Not part of the backend image
+apps/
+data/
+db/
+ingestion/
+docs/
+evals/
+tests/
+_tmp/
+
+# Local build artefacts
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.git/
+.github/
+node_modules/
+.next/
+.vercel/
+*.log

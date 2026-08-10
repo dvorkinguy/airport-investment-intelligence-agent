@@ -28,11 +28,14 @@ curl -N -X POST localhost:8000/chat \
   -d '{"message":"Which New England airports are the best terminal-expansion candidates?"}'
 ```
 
+Deployed at `https://airport-agent-532602559497.europe-west3.run.app` (Cloud Run,
+europe-west3). Deploy instructions are at the bottom of this file.
+
 ## API
 
 | Route | Notes |
 |---|---|
-| `GET /health` | 200 healthy / 503 degraded. Reports data backend, model, data vintage, and which Tier 2 pieces are still stubs. |
+| `GET /health` | 200 healthy / 503 degraded. Reports data backend, model, data vintage, whether tracing and the query log are live, and which pieces are still stubs. |
 | `POST /chat` | `{message, thread_id?, stream?}`. Same `thread_id` continues a conversation. |
 | `GET /docs` | Generated OpenAPI. |
 
@@ -116,12 +119,72 @@ is a good investment.
 | `MAX_TOOL_ITERATIONS` | `8` | Past the cap the model answers without tools, so a turn always ends in prose. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Whole-request ceiling. |
 | `LOG_JSON` | `true` | `false` for readable local logs. |
-| `LANGFUSE_ENABLED` / `CLERK_AUTH_ENABLED` | `false` | Turn on once the Tier 2 stubs are implemented. |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | - | Present -> tracing on. |
+| `LANGFUSE_HOST` / `LANGFUSE_BASE_URL` | cloud | `BASE_URL` is the v4 name and wins if both are set. |
+| `LANGFUSE_ENVIRONMENT` | `dev` | `prod` on Cloud Run, so demo traffic never pollutes prod analytics. |
+| `LANGFUSE_ENABLED` | unset | Tri-state: unset follows the keys; set it to force on or off. |
+| `LOG_QUERIES` | `true` | `false` disables the `queries` table write. |
+| `CLERK_AUTH_ENABLED` | `false` | Turn on once JWT verification is implemented. |
 
-## Stubbed on purpose (Tier 2)
+## Observability
+
+**Langfuse** (`observability.py`) traces every request against
+`langfuse.guydvorkin.com`. One trace per question:
+
+```
+chat-request                 agent        input = the question, output = answer + assumptions
+  LangGraph                  chain
+    agent                    agent
+      agent-step             generation   model, tokens, cost
+      compare_airports       tool         arguments and returned rows
+```
+
+`session_id` is the `thread_id`, so a multi-turn conversation groups under
+Sessions. `user_id` is `anonymous` until Clerk lands. The environment tag is
+`dev` locally and `prod` on Cloud Run, and tags carry the model and whether the
+answer came from Neon or from fixtures.
+
+Tracing switches itself on when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`
+are present. Bad keys or an unreachable host disable tracing with a warning -
+they never take the service down.
+
+OpenRouter model names carry a provider prefix (`anthropic/claude-sonnet-4.5`)
+that Langfuse's built-in price list does not match, so traces reported `$0`
+despite correct token counts. Custom model definitions are registered in the
+Langfuse project; a question currently costs about $0.03 on Sonnet 4.5.
+
+**Query log** (`query_log.py`) writes one row per answered question to the Neon
+`queries` table: thread, request, user, question, answer, tools used, latency,
+model, data backend, Langfuse `trace_id`, error. The table is created at startup
+with `CREATE TABLE IF NOT EXISTS` - it belongs to the service, not to the
+dataset in `db/`. Writes are best-effort: a logging failure can never fail an
+answer.
+
+## Deploy (Cloud Run)
+
+```bash
+gcloud run deploy airport-agent --project airport-intel-agent \
+  --region europe-west3 --source . \
+  --service-account airport-agent-run@airport-intel-agent.iam.gserviceaccount.com \
+  --min-instances 0 --max-instances 2 --timeout 120s --concurrency 20 \
+  --allow-unauthenticated \
+  --set-env-vars '^@^AGENT_MODEL=anthropic/claude-sonnet-4.5@LANGFUSE_ENVIRONMENT=prod@LANGFUSE_HOST=https://langfuse.guydvorkin.com@LOG_JSON=true@CORS_ORIGINS=["https://airport.guydvorkin.com","http://localhost:3000"]' \
+  --set-secrets '^@^OPENROUTER_API_KEY=openrouter-api-key:latest@DATABASE_URL=database-url:latest@LANGFUSE_PUBLIC_KEY=langfuse-public-key:latest@LANGFUSE_SECRET_KEY=langfuse-secret-key:latest'
+```
+
+The `^@^` prefix sets `@` as the delimiter. It is required, not cosmetic: the
+CORS value contains commas, and gcloud's default comma splitting turns the JSON
+list into malformed flags.
+
+Secrets live in Secret Manager (`openrouter-api-key`, `database-url`,
+`langfuse-public-key`, `langfuse-secret-key`) and are mounted as environment
+variables. The service runs as a dedicated least-privilege service account with
+`secretAccessor` on those four secrets and nothing else - not the default
+compute account. `.dockerignore` keeps `.env` and the exam PDF out of the build
+context, so neither can reach an image layer.
+
+## Stubbed on purpose
 
 | Piece | Where | What is missing |
 |---|---|---|
-| Langfuse tracing | `observability.build_langfuse_handler` | Callback list, settings and boot warning are wired; only the handler construction raises `NotImplementedError`. |
-| Clerk auth | `auth.verify_clerk_jwt` | The dependency is on the routes and returns an anonymous principal; JWKS verification raises `NotImplementedError`. |
-| Queries log table | - | Designed in ADR-003; request logs currently carry user, thread and latency. |
+| Clerk auth | `auth.verify_clerk_jwt` | The dependency is already on the routes and returns an anonymous principal; JWKS verification raises `NotImplementedError`. Waiting on Clerk keys. |
