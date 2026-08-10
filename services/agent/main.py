@@ -230,7 +230,14 @@ async def health(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
             "read": rt.repo.stats() if hasattr(rt.repo, "stats") else {},
             "write": pool_stats(rt.write_pool),
         },
-        "stubs": {"clerk_auth": not rt.settings.clerk_auth_enabled},
+        "auth": {
+            # Verification is always on when configured; "required" is the switch
+            # that decides whether an anonymous caller is still allowed. See auth.py.
+            "clerk_verification": rt.settings.clerk_configured,
+            "clerk_required": rt.settings.clerk_auth_enabled,
+            "issuer": rt.settings.clerk_jwt_issuer,
+        },
+        "stubs": {},
     }
     return JSONResponse(body, status_code=200 if db_ok else 503)
 
@@ -326,6 +333,7 @@ async def _events(
                 thread_id=thread_id,
                 request_id=request_id,
                 user_id=principal.user_id,
+                user_email=principal.email,
                 question=message,
                 answer=answer or None,
                 tools_used=tools_used,

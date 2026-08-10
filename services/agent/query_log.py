@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS queries (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     thread_id     TEXT        NOT NULL,
     request_id    TEXT,
+    -- Both identity columns come from verified Clerk claims only (see auth.py).
     user_id       TEXT        NOT NULL DEFAULT 'anonymous',
+    user_email    TEXT,
     question      TEXT        NOT NULL,
     answer        TEXT,
     tools_used    TEXT[]      NOT NULL DEFAULT '{}',
@@ -37,16 +39,21 @@ CREATE TABLE IF NOT EXISTS queries (
 )
 """
 
+#: Idempotent, and needed because the table predates the column: an environment
+#: that already ran the earlier DDL gets user_email added rather than skipped.
+MIGRATIONS = ("ALTER TABLE queries ADD COLUMN IF NOT EXISTS user_email TEXT",)
+
 INDEXES = (
     "CREATE INDEX IF NOT EXISTS queries_created_at_idx ON queries (created_at DESC)",
     "CREATE INDEX IF NOT EXISTS queries_thread_id_idx  ON queries (thread_id)",
+    "CREATE INDEX IF NOT EXISTS queries_user_id_idx    ON queries (user_id)",
 )
 
 INSERT = """
-INSERT INTO queries (thread_id, request_id, user_id, question, answer,
+INSERT INTO queries (thread_id, request_id, user_id, user_email, question, answer,
                      tools_used, latency_ms, model, data_backend, trace_id, error)
-VALUES (%(thread_id)s, %(request_id)s, %(user_id)s, %(question)s, %(answer)s,
-        %(tools_used)s, %(latency_ms)s, %(model)s, %(data_backend)s,
+VALUES (%(thread_id)s, %(request_id)s, %(user_id)s, %(user_email)s, %(question)s,
+        %(answer)s, %(tools_used)s, %(latency_ms)s, %(model)s, %(data_backend)s,
         %(trace_id)s, %(error)s)
 """
 
@@ -69,7 +76,7 @@ class QueryLog:
             async with self._pool.connection() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(DDL)
-                    for statement in INDEXES:
+                    for statement in (*MIGRATIONS, *INDEXES):
                         await cur.execute(statement)
             log.info("queries table ready")
             return True
@@ -84,6 +91,7 @@ class QueryLog:
         thread_id: str,
         request_id: str | None,
         user_id: str,
+        user_email: str | None = None,
         question: str,
         answer: str | None,
         tools_used: list[str],
@@ -104,6 +112,7 @@ class QueryLog:
                             "thread_id": thread_id,
                             "request_id": request_id,
                             "user_id": user_id,
+                            "user_email": user_email,
                             "question": question,
                             "answer": answer,
                             "tools_used": list(tools_used),

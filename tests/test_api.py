@@ -38,7 +38,7 @@ def sse_events(raw: str) -> list[dict]:
     ]
 
 
-def test_health_reports_backend_model_and_stubs(client: TestClient) -> None:
+def test_health_reports_backend_model_and_auth_posture(client: TestClient) -> None:
     body = client.get("/health").json()
     assert body["status"] == "ok"
     assert body["data_backend"] == "fixture"
@@ -48,7 +48,10 @@ def test_health_reports_backend_model_and_stubs(client: TestClient) -> None:
     # No Langfuse keys and no database in the test environment.
     assert body["tracing"] is False
     assert body["query_log"] is False
-    assert body["stubs"] == {"clerk_auth": True}
+    # Tokens are verified whenever one is sent; anonymous callers still get in.
+    assert body["auth"]["clerk_verification"] is True
+    assert body["auth"]["clerk_required"] is False
+    assert body["stubs"] == {}
 
 
 def test_root_lists_the_endpoints(client: TestClient) -> None:

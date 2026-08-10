@@ -59,15 +59,44 @@ services/agent/
   main.py              FastAPI app, SSE streaming, health
   graph.py             LangGraph StateGraph: agent <-> tools
   state.py             typed state: messages, thread_id, assumptions
-  tools.py             the five read-only tools
+  tools.py             seven tools: six read-only over SQL, one live
+  faa.py               FAA NAS live-status client (cached, fail-soft)
   prompts.py           system prompt (the anti-hallucination guardrail)
   settings.py          pydantic-settings; everything from .env
   logging_config.py    one JSON log line per event, request-scoped context
-  auth.py              Clerk JWT dependency (Tier 2 stub)
-  observability.py     Langfuse callback slot (Tier 2 stub)
+  auth.py              Clerk session-token verification (JWKS, RS256)
+  observability.py     Langfuse tracing
+  query_log.py         the `queries` audit table
   repository/          AirportRepo protocol + PostgresRepo + FixtureRepo
   fixtures/            offline JSON dataset (synthetic)
 ```
+
+## Tools
+
+| Tool | Source | Notes |
+|---|---|---|
+| `resolve_airport` | `airports` | Place name or code -> IATA + reference facts. |
+| `rank_airports` | `v_opportunity_score` | Ranked shortlist with the five score components. |
+| `airport_metrics` | `v_airport_metrics` | Traffic, load factor, long-haul share, YoY growth. |
+| `compare_airports` | `+ v_congestion` | Two airports side by side. Historical congestion lives here. |
+| `unmet_demand_estimate` | `v_unmet_demand_est` | Labelled ESTIMATE, with its three drivers. |
+| `investment_context` | T2.5 views (ADR-004) | Carrier concentration (HHI), FAA Form 127 finances, ROI proxy. |
+| `faa_live_status` | FAA NAS feed (live) | Ground stops, delay programmes, closures happening now. |
+
+`investment_context` is the financial reality check on a capacity case: traffic
+growth says an airport is under pressure, it does not say the airport can pay for
+terminal capacity. An airport with negative net revenue per enplanement is
+running an operating loss on every passenger. Its three sources are independently
+optional - a Tier 1-only database returns "unavailable" per source rather than
+failing the question.
+
+`faa_live_status` is the one tool that leaves the dataset, and it is fenced off
+in both the prompt and the payload: **live status is today's operations colour,
+never long-term investment evidence.** A thunderstorm over Boston this afternoon
+says nothing about a terminal expansion case. The client caches the whole
+document for five minutes behind a lock (one fetch serves every airport asked
+about), times out at five seconds, and degrades to "FAA feed unavailable" rather
+than raising - a dead external feed cannot break an answer built on SQL.
 
 ## How it holds the line on invented numbers
 
@@ -88,7 +117,7 @@ services/agent/
 
 ```bash
 uv run pytest                      # unit + integration, no network, no database
-uv run python -m evals.run_evals   # the four exam questions, live model, fixture data
+uv run python -m evals.run_evals   # 4 exam questions + the financial check, live model
 uv run python -m evals.run_evals --case q3 --verbose
 ```
 
@@ -124,7 +153,32 @@ is a good investment.
 | `LANGFUSE_ENVIRONMENT` | `dev` | `prod` on Cloud Run, so demo traffic never pollutes prod analytics. |
 | `LANGFUSE_ENABLED` | unset | Tri-state: unset follows the keys; set it to force on or off. |
 | `LOG_QUERIES` | `true` | `false` disables the `queries` table write. |
-| `CLERK_AUTH_ENABLED` | `false` | Turn on once JWT verification is implemented. |
+| `CLERK_AUTH_ENABLED` | `false` | **Requires** a token; it does not switch verification on. Off = anonymous callers allowed. |
+| `CLERK_JWT_ISSUER` | dev instance | Clerk Frontend API origin. Set per environment. |
+| `CLERK_JWKS_URL` | derived | Defaults to `<issuer>/.well-known/jwks.json`. |
+| `CLERK_SECRET_KEY` | - | Not used to verify tokens (JWKS is public). Held for Clerk Backend API calls. |
+| `FAA_STATUS_URL` | FAA NAS feed | Keyless public XML. |
+| `FAA_TIMEOUT_SECONDS` / `FAA_CACHE_SECONDS` | `5` / `300` | Feed timeout and in-process cache TTL. |
+
+## Authentication
+
+Identity comes only from a signature the service verified. `Authorization:
+Bearer <clerk session token>` is checked against Clerk's JWKS (RS256, issuer and
+expiry enforced, `alg: none` rejected by an algorithm allowlist), and `sub` /
+`email` are read from the verified claims. Caller-supplied `X-User-Id` /
+`X-User-Email` headers are ignored by design - honouring one would let any caller
+write any user's name into the audit log.
+
+Two independent switches, which is what lets the public demo and a signed-in user
+share one endpoint:
+
+| | No token | Valid token | Bad token |
+|---|---|---|---|
+| `CLERK_AUTH_ENABLED=false` (default) | anonymous | identified | **401** |
+| `CLERK_AUTH_ENABLED=true` | 401 | identified | **401** |
+
+A present-but-invalid token is always a 401. Downgrading a forged token to
+"anonymous" would hide exactly the event worth seeing.
 
 ## Observability
 
@@ -140,7 +194,7 @@ chat-request                 agent        input = the question, output = answer 
 ```
 
 `session_id` is the `thread_id`, so a multi-turn conversation groups under
-Sessions. `user_id` is `anonymous` until Clerk lands. The environment tag is
+Sessions. `user_id` is the verified Clerk `sub`, or `anonymous`. The environment tag is
 `dev` locally and `prod` on Cloud Run, and tags carry the model and whether the
 answer came from Neon or from fixtures.
 
@@ -162,14 +216,22 @@ answer.
 
 ## Deploy (Cloud Run)
 
+Build first, because `--source` cannot pass a `--build-arg` and the image's OCI
+revision label is one:
+
 ```bash
+TAG=$(git rev-parse --short=12 HEAD)
+REPO=europe-west3-docker.pkg.dev/airport-intel-agent/airport-agent/airport-agent
+gcloud builds submit --project airport-intel-agent --config cloudbuild.yaml \
+  --substitutions=_GIT_SHA=$TAG,_IMAGE=$REPO:$TAG
+
 gcloud run deploy airport-agent --project airport-intel-agent \
-  --region europe-west3 --source . \
+  --region europe-west3 --image $REPO:$TAG \
   --service-account airport-agent-run@airport-intel-agent.iam.gserviceaccount.com \
   --min-instances 0 --max-instances 2 --timeout 120s --concurrency 20 \
   --allow-unauthenticated \
-  --set-env-vars '^@^AGENT_MODEL=anthropic/claude-sonnet-4.5@LANGFUSE_ENVIRONMENT=prod@LANGFUSE_HOST=https://langfuse.guydvorkin.com@LOG_JSON=true@CORS_ORIGINS=["https://airport.guydvorkin.com","http://localhost:3000"]' \
-  --set-secrets '^@^OPENROUTER_API_KEY=openrouter-api-key:latest@DATABASE_URL=database-url:latest@LANGFUSE_PUBLIC_KEY=langfuse-public-key:latest@LANGFUSE_SECRET_KEY=langfuse-secret-key:latest'
+  --set-env-vars '^@^AGENT_MODEL=anthropic/claude-sonnet-4.5@LANGFUSE_ENVIRONMENT=prod@LANGFUSE_HOST=https://langfuse.guydvorkin.com@LOG_JSON=true@CLERK_JWT_ISSUER=https://busy-viper-68.clerk.accounts.dev@CORS_ORIGINS=["https://airport.guydvorkin.com","http://localhost:3000"]' \
+  --set-secrets '^@^OPENROUTER_API_KEY=openrouter-api-key:latest@DATABASE_URL=database-url:latest@LANGFUSE_PUBLIC_KEY=langfuse-public-key:latest@LANGFUSE_SECRET_KEY=langfuse-secret-key:latest@CLERK_SECRET_KEY=clerk-secret-key:latest'
 ```
 
 The `^@^` prefix sets `@` as the delimiter. It is required, not cosmetic: the
@@ -177,14 +239,19 @@ CORS value contains commas, and gcloud's default comma splitting turns the JSON
 list into malformed flags.
 
 Secrets live in Secret Manager (`openrouter-api-key`, `database-url`,
-`langfuse-public-key`, `langfuse-secret-key`) and are mounted as environment
-variables. The service runs as a dedicated least-privilege service account with
-`secretAccessor` on those four secrets and nothing else - not the default
+`langfuse-public-key`, `langfuse-secret-key`, `clerk-secret-key`) and are mounted
+as environment variables. The service runs as a dedicated least-privilege service account with
+`secretAccessor` on those five secrets and nothing else - not the default
 compute account. `.dockerignore` keeps `.env` and the exam PDF out of the build
 context, so neither can reach an image layer.
 
 ## Stubbed on purpose
 
-| Piece | Where | What is missing |
-|---|---|---|
-| Clerk auth | `auth.verify_clerk_jwt` | The dependency is already on the routes and returns an anonymous principal; JWKS verification raises `NotImplementedError`. Waiting on Clerk keys. |
+Nothing. Clerk verification was the last stub and landed 2026-08-11; `/health`
+reports `stubs: {}`.
+
+One cross-lane gap remains, in a file this lane does not own:
+`apps/web/src/lib/api.ts` still sends `X-User-Id` / `X-User-Email` and no
+`Authorization` header. The backend ignores those headers, so a signed-in user
+currently logs as `anonymous` until the web lane attaches the Clerk session
+token instead.
