@@ -108,9 +108,13 @@ Stated in-product (the agent says these when relevant) and here:
 5. Score weights are judgment calls, stated openly and trivially adjustable; the
    ranking methodology (components exposed, normalized) matters more than the
    exact weights.
-6. Airports below 100k annual passengers are excluded from normalization to avoid
+6. Airport universe: of the 32,598 US airfields in the source data, we scope to
+   the 679 with an IATA code and scheduled airline service - the rest are
+   heliports, private strips, and non-scheduled fields with no analytical value
+   for airline-capacity investment.
+7. Airports below 100k annual passengers are excluded from normalization to avoid
    small-base distortion.
-7. Profitability is proxied by capacity-growth potential per the brief's own
+8. Profitability is proxied by capacity-growth potential per the brief's own
    framing; real underwriting adds financial layers (Section 10).
 
 ## 6. Key tradeoffs
