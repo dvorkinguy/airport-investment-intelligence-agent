@@ -12,6 +12,7 @@ surfaced verbatim to the agent, which then says so instead of inventing numbers.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import psycopg
@@ -92,6 +93,20 @@ FROM v_airport_metrics
 """
 
 
+def coerce_numeric(value: Any) -> Any:
+    """Postgres NUMERIC arrives as ``Decimal``, which JSON-encodes as a string.
+
+    A passenger count reaching the model as ``"3180000.00"`` is a number the model
+    then has to reformat - and reformatting is where invented digits creep in.
+    Integral values become ``int``, fractional ones ``float``, matching the
+    fixture backend exactly.
+    """
+    if isinstance(value, Decimal):
+        as_float = float(value)
+        return int(as_float) if as_float.is_integer() else as_float
+    return value
+
+
 class PostgresRepo:
     """Implements ``AirportRepo`` against Neon."""
 
@@ -137,7 +152,10 @@ class PostgresRepo:
                             f"SET LOCAL statement_timeout = {self._statement_timeout_ms}"
                         )
                         await cur.execute(sql, params)
-                        return [dict(r) for r in await cur.fetchall()]
+                        return [
+                            {k: coerce_numeric(v) for k, v in row.items()}
+                            for row in await cur.fetchall()
+                        ]
         except psycopg.errors.UndefinedTable as exc:
             raise RepoError(
                 f"required table/view is not present in the database: {exc}"

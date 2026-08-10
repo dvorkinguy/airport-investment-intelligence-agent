@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from agent import configure_event_loop
 from agent.logging_config import configure
 from agent.settings import get_settings
 from evals.cases import CASES
@@ -62,6 +63,7 @@ def main() -> int:
     parser.add_argument("--report", type=Path, help="write a JSON report to this path")
     args = parser.parse_args()
 
+    configure_event_loop()
     settings = get_settings()
     configure(settings.log_level, json_output=False)
     if not settings.openrouter_key:

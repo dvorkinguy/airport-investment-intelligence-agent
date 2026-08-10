@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from agent.repository import FixtureRepo, RepoError, UnknownAirportError
+from agent.repository.postgres import Q_RANK, coerce_numeric
 from agent.repository.base import (
     AIRPORT_COLUMNS,
     CONGESTION_COLUMNS,
@@ -78,6 +81,22 @@ async def test_vintage_and_ping(repo: FixtureRepo) -> None:
     assert vintage["backend"] == "fixture"
     assert vintage["first_year"] <= vintage["last_year"]
     assert await repo.ping() is True
+
+
+def test_postgres_numerics_land_as_plain_numbers() -> None:
+    """A Decimal reaching the model as a quoted string invites reformatting."""
+    assert coerce_numeric(Decimal("3180000.00")) == 3_180_000
+    assert isinstance(coerce_numeric(Decimal("3180000.00")), int)
+    assert coerce_numeric(Decimal("0.8355")) == pytest.approx(0.8355)
+    assert coerce_numeric("BOS") == "BOS"
+    assert coerce_numeric(None) is None
+
+
+def test_ranking_sql_filters_by_region_and_states_without_interpolation() -> None:
+    """Read-only by construction: filters are bound parameters, never f-strings."""
+    assert "%(region)s" in Q_RANK and "%(states)s" in Q_RANK
+    assert Q_RANK.strip().upper().startswith("SELECT")
+    assert "FROM regions" in Q_RANK
 
 
 async def test_load_factor_matches_passengers_over_seats(repo: FixtureRepo) -> None:
