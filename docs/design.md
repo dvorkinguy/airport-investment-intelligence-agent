@@ -74,10 +74,29 @@ an airport ranks, not just where.
   observes turned-away demand directly - and the agent labels it as such,
   with its drivers, every time.
 
-### Worked example
+### Worked example (real output, gate run 2026-08-10)
 
-[GATE: insert a real ranked New England table + one unmet-demand breakdown from
-the live views once data is loaded.]
+New England terminal-expansion ranking - live agent answer, verified against the
+SQL views directly:
+
+| Airport | Score | Pax Growth | Load Factor | Congestion | Flight Growth | Infra |
+|---|---|---|---|---|---|---|
+| BGR Bangor, ME | 68.4 | 90.6 | 62.9 | 38.8 | 79.5 | 58.5 |
+| PWM Portland, ME | 65.5 | 62.5 | 84.8 | 46.9 | 50.9 | 85.3 |
+| BTV Burlington, VT | 64.6 | 66.5 | 73.7 | 61.6 | 42.0 | 76.3 |
+| PVD Providence, RI | 62.1 | 73.7 | 41.5 | 75.0 | 48.7 | 73.4 |
+| BOS Boston, MA | 50.3 | 28.6 | 77.7 | 85.7 | 23.2 | 16.7 |
+
+The components tell the story the composite alone cannot: BOS has the region's
+worst congestion (85.7) yet ranks fifth, because its modest passenger growth
+(28.6) and already-invested infrastructure (16.7) cap the expansion upside.
+
+Estimated unmet demand at SFO (always labeled an estimate, drivers shown):
+
+| Year | Est. unmet pax | Load factor | Delay rate | Growth gap |
+|---|---|---|---|---|
+| 2025 | 1,381,183 | 82.3% | 24.1% | -1.2% |
+| 2024 | 1,741,867 | 83.3% | 29.8% | -0.1% |
 
 ## 4. Where and how AI is used - and where it is not
 
@@ -98,8 +117,10 @@ per-node setting in the same graph.
 
 Stated in-product (the agent says these when relevant) and here:
 
-1. Data vintage: BTS T-100 and on-time data, [GATE: years loaded]. Reporting lags
-   ~2-3 months; answers cite their data years.
+1. Data vintage: BTS T-100 segments and on-time data, 2023-2025 (584,498 T-100
+   rows after filtering to scheduled passenger service, CLASS=F; 12,164
+   airport-month on-time rows). Reporting lags ~2-3 months; answers cite their
+   data years.
 2. Long-haul threshold: >= 1,500 miles (domestic long-haul convention). Configurable.
 3. Unmet demand is estimated from proxies (load factor, growth gap, delays) - not
    observed bookings/spill data, which airlines do not publish.
