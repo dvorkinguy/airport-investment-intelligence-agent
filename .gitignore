@@ -10,6 +10,12 @@ service-account*.json
 # Exam brief - Deloitte IP, kept local only (decision F1)
 docs/FDE-Exam-2.pdf
 
+# Internal command-center ops file - never in the repo
+_command-center.md
+
+# Raw data downloads too large for git (processed CSVs are committed)
+data/raw/
+
 # Scratch / caches
 _tmp/
 data/cache/
