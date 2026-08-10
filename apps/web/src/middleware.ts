@@ -21,7 +21,17 @@ const isProtectedRoute = createRouteMatcher(["/chat(.*)"]);
 
 export default clerkEnabled
   ? clerkMiddleware(async (auth, req) => {
-      if (isProtectedRoute(req)) await auth.protect();
+      if (isProtectedRoute(req)) {
+        // Explicit unauthenticatedUrl forces a real redirect. Without it,
+        // protect() rewrites to an internal Clerk handshake path meant for
+        // a browser that has already run Clerk's client JS - a cookie-less
+        // request (curl, or a browser landing on /chat cold with no prior
+        // page load) hits Next's catch-all and 404s instead of ever
+        // reaching sign-in. Confirmed against the built @clerk/nextjs
+        // source: unauthenticatedUrl short-circuits straight to a
+        // redirect(), skipping that rewrite path entirely.
+        await auth.protect({ unauthenticatedUrl: new URL("/sign-in", req.url).toString() });
+      }
     })
   : function passthroughMiddleware() {
       return NextResponse.next();

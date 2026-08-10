@@ -53,7 +53,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="bg-white text-slate-900 antialiased">
-        {clerkEnabled ? <ClerkProvider>{content}</ClerkProvider> : content}
+        {clerkEnabled ? (
+          <ClerkProvider
+            signInUrl="/sign-in"
+            signUpUrl="/sign-up"
+            signInFallbackRedirectUrl="/chat"
+            signUpFallbackRedirectUrl="/chat"
+          >
+            {content}
+          </ClerkProvider>
+        ) : (
+          content
+        )}
       </body>
     </html>
   );
