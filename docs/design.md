@@ -98,6 +98,15 @@ Estimated unmet demand at SFO (always labeled an estimate, drivers shown):
 | 2025 | 1,381,183 | 82.3% | 24.1% | -1.2% |
 | 2024 | 1,741,867 | 83.3% | 29.8% | -0.1% |
 
+**The financial reality check (added after loading FAA Form 127 financials):**
+several of the capacity-ranked New England leaders - BGR, BTV, MHT, BDL - show
+*negative* net revenue per enplanement in FY2023-24, and ANC's carrier
+concentration is HHI ~4,150 (one airline near 62% share). Capacity opportunity
+is the demand half of the investment case; the money half (operating economics,
+carrier dependence) can point the other way, and the extended views
+(`v_roi_proxy`, `v_carrier_concentration`, ADR-004) exist precisely so an
+analyst sees both halves before an investment committee does.
+
 ## 4. Where and how AI is used - and where it is not
 
 | Task | AI? | Detail |
