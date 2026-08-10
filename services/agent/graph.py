@@ -83,13 +83,17 @@ def build_graph(
     tools: list[BaseTool] = build_tools(repo)
     by_name = {t.name: t for t in tools}
     model = llm or build_llm(s)
-    model_with_tools = model.bind_tools(tools)
+    # Named runs, so a trace reads "agent-step" / "final-answer" rather than two
+    # identical "ChatOpenAI" rows that give no clue which step is which. The
+    # tool-bound call is "agent-step" because it decides: call tools, or answer.
+    model_with_tools = model.bind_tools(tools).with_config(run_name="agent-step")
+    model_final = model.with_config(run_name="final-answer")
 
     async def agent_node(state: AgentState) -> dict[str, Any]:
         capped = _tool_rounds(state) >= s.max_tool_iterations
         system = SYSTEM_PROMPT + (f"\n\n{FORCED_ANSWER_NUDGE}" if capped else "")
         # Past the cap the model answers without tools, so a turn always ends in prose.
-        runnable = model if capped else model_with_tools
+        runnable = model_final if capped else model_with_tools
         response = await runnable.ainvoke([SystemMessage(content=system), *state["messages"]])
         log.info(
             "agent step",

@@ -54,12 +54,21 @@ class Settings(BaseSettings):
     log_json: bool = True
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
-    # --- Tier 2 stubs (see observability.py / auth.py) ---
-    langfuse_enabled: bool = False
+    # --- Observability ---
+    # Tri-state on purpose: unset means "on when keys are present". The .env is
+    # owned by the command-center lane, so tracing must not need a new flag there.
+    langfuse_enabled: bool | None = None
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_base_url: str | None = None
+    langfuse_environment: str = "dev"
+    langfuse_debug: bool = False
 
+    # --- Query log ---
+    log_queries: bool = True
+
+    # --- Tier 2 stub (see auth.py) ---
     clerk_auth_enabled: bool = False
     clerk_secret_key: SecretStr | None = None
     clerk_jwt_issuer: str | None = None
@@ -78,6 +87,26 @@ class Settings(BaseSettings):
     @property
     def openrouter_key(self) -> str | None:
         return self.openrouter_api_key.get_secret_value() if self.openrouter_api_key else None
+
+    @property
+    def langfuse_keys(self) -> tuple[str, str] | None:
+        if self.langfuse_public_key and self.langfuse_secret_key:
+            return (
+                self.langfuse_public_key.get_secret_value(),
+                self.langfuse_secret_key.get_secret_value(),
+            )
+        return None
+
+    @property
+    def langfuse_url(self) -> str:
+        """LANGFUSE_BASE_URL is the v4 name; LANGFUSE_HOST is still in the wild."""
+        return self.langfuse_base_url or self.langfuse_host
+
+    @property
+    def tracing_enabled(self) -> bool:
+        if self.langfuse_enabled is not None:
+            return self.langfuse_enabled
+        return self.langfuse_keys is not None
 
 
 @lru_cache(maxsize=1)

@@ -67,9 +67,14 @@ def repo() -> FixtureRepo:
     return FixtureRepo()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Deterministic settings: fixture backend, fake key, no external state."""
+    """Deterministic settings: fixture backend, fake key, no external state.
+
+    Autouse on purpose. Without it a bare ``Settings()`` inside a test picks up
+    the developer's real .env - which silently turned Langfuse tracing on in a
+    test that asserted it was off, and would have hit the live database.
+    """
     for key in ("DATABASE_URL", "LANGFUSE_ENABLED", "CLERK_AUTH_ENABLED"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("REPO_BACKEND", "fixture")

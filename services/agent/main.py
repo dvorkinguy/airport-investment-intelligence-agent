@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -23,10 +24,11 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
 from agent import __version__
-from agent.auth import Principal, current_principal
+from agent.auth import ANONYMOUS, Principal, current_principal
 from agent.graph import build_graph
 from agent.logging_config import bind, clear, configure, get_logger
-from agent.observability import get_callbacks, warn_if_unwired
+from agent.observability import Tracing, build_tracing
+from agent.query_log import QueryLog
 from agent.repository import AirportRepo, FixtureRepo, PostgresRepo
 from agent.settings import Settings, get_settings
 from agent.state import merge_assumptions
@@ -62,6 +64,9 @@ class Runtime:
     backend: str
     checkpointer_kind: str
     vintage: dict[str, Any] = field(default_factory=dict)
+    tracing: Tracing = field(default_factory=lambda: Tracing(None))
+    query_log: QueryLog = field(default_factory=lambda: QueryLog(None))
+    queries_ready: bool = False
 
 
 # --- Boot ----------------------------------------------------------------
@@ -81,14 +86,16 @@ async def _build_repo(s: Settings) -> tuple[AirportRepo, str]:
     return FixtureRepo(), "fixture"
 
 
-async def _build_checkpointer(s: Settings) -> tuple[Any, str, Any]:
-    """Postgres-checkpointed threads, with an in-memory fallback so local runs work."""
-    from langgraph.checkpoint.memory import MemorySaver
+async def _build_write_pool(s: Settings) -> Any | None:
+    """One writable pool, shared by the checkpointer and the query log.
 
+    The repository pool cannot be reused: it runs every statement inside
+    SET TRANSACTION READ ONLY, which is the guarantee that the analysis path
+    cannot mutate the dataset.
+    """
     if not s.database_dsn:
-        return MemorySaver(), "memory", None
+        return None
     try:
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
         from psycopg.rows import dict_row
         from psycopg_pool import AsyncConnectionPool
 
@@ -100,23 +107,42 @@ async def _build_checkpointer(s: Settings) -> tuple[Any, str, Any]:
             kwargs={"autocommit": True, "row_factory": dict_row, "prepare_threshold": None},
         )
         await pool.open(wait=True, timeout=15)
+        return pool
+    except Exception:
+        log.exception("write pool unavailable")
+        return None
+
+
+async def _build_checkpointer(s: Settings, pool: Any | None) -> tuple[Any, str]:
+    """Postgres-checkpointed threads, with an in-memory fallback so local runs work."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    if pool is None:
+        return MemorySaver(), "memory"
+    try:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
         saver = AsyncPostgresSaver(pool)
         await saver.setup()
-        return saver, "postgres", pool
+        return saver, "postgres"
     except Exception:
         log.exception("PostgresSaver unavailable - falling back to in-memory checkpoints")
-        return MemorySaver(), "memory", None
+        return MemorySaver(), "memory"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     s = get_settings()
     configure(s.log_level, s.log_json)
-    warn_if_unwired(s)
 
     repo, backend = await _build_repo(s)
-    checkpointer, ckpt_kind, ckpt_pool = await _build_checkpointer(s)
+    write_pool = await _build_write_pool(s)
+    checkpointer, ckpt_kind = await _build_checkpointer(s, write_pool)
     graph = build_graph(repo, checkpointer=checkpointer, settings=s)
+    tracing = build_tracing(s)
+
+    query_log = QueryLog(write_pool if s.log_queries else None)
+    queries_ready = await query_log.ensure_table()
 
     try:
         vintage = await repo.data_vintage()
@@ -131,6 +157,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         backend=backend,
         checkpointer_kind=ckpt_kind,
         vintage=vintage,
+        tracing=tracing,
+        query_log=query_log,
+        queries_ready=queries_ready,
     )
     log.info(
         "service ready",
@@ -138,15 +167,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "backend": backend,
             "checkpointer": ckpt_kind,
             "model": s.agent_model,
+            "tracing": tracing.enabled,
+            "query_log": queries_ready,
             "version": __version__,
         },
     )
     try:
         yield
     finally:
+        tracing.flush()
         await repo.close() if hasattr(repo, "close") else None
-        if ckpt_pool is not None:
-            await ckpt_pool.close()
+        if write_pool is not None:
+            await write_pool.close()
 
 
 app = FastAPI(
@@ -188,10 +220,10 @@ async def health(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
         "model": rt.settings.agent_model,
         "llm_configured": bool(rt.settings.openrouter_key),
         "data_vintage": rt.vintage,
-        "stubs": {
-            "langfuse_tracing": not rt.settings.langfuse_enabled,
-            "clerk_auth": not rt.settings.clerk_auth_enabled,
-        },
+        "tracing": rt.tracing.enabled,
+        "tracing_environment": rt.tracing.environment if rt.tracing.enabled else None,
+        "query_log": rt.queries_ready,
+        "stubs": {"clerk_auth": not rt.settings.clerk_auth_enabled},
     }
     return JSONResponse(body, status_code=200 if db_ok else 503)
 
@@ -221,12 +253,16 @@ def _sse(event: dict[str, Any]) -> str:
 
 
 async def _events(
-    rt: Runtime, message: str, thread_id: str
+    rt: Runtime,
+    message: str,
+    thread_id: str,
+    principal: Principal = ANONYMOUS,
+    request_id: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Normalised event stream over the graph run."""
+    """Normalised event stream over the graph run, traced and logged end to end."""
     config = {
         "configurable": {"thread_id": thread_id},
-        "callbacks": get_callbacks(rt.settings),
+        "callbacks": rt.tracing.callbacks(),
         "recursion_limit": rt.settings.max_tool_iterations * 2 + 4,
     }
     inputs = {"messages": [HumanMessage(content=message)], "thread_id": thread_id}
@@ -235,55 +271,107 @@ async def _events(
     answer_parts: list[str] = []
     # Fallback for gateways/models that return a whole message instead of tokens.
     final_message = ""
+    started = time.perf_counter()
+    failure: str | None = None
 
     yield {"type": "start", "thread_id": thread_id}
-    async with asyncio.timeout(rt.settings.request_timeout_seconds):
-        async for mode, payload in rt.graph.astream(
-            inputs, config, stream_mode=["updates", "messages"]
-        ):
-            if mode == "messages":
-                chunk, meta = payload
-                if meta.get("langgraph_node") == "agent":
-                    text = _chunk_text(chunk)
-                    if text:
-                        answer_parts.append(text)
-                        yield {"type": "token", "content": text}
-            elif mode == "updates":
-                for node, update in (payload or {}).items():
-                    if node == "agent":
-                        for m in update.get("messages", []):
-                            calls = getattr(m, "tool_calls", None) or []
-                            for call in calls:
-                                tools_used.append(call["name"])
-                                yield {
-                                    "type": "tool_call",
-                                    "name": call["name"],
-                                    "args": call.get("args", {}),
-                                }
-                            if not calls:
-                                final_message = _chunk_text(m) or final_message
-                    elif node == "tools":
-                        for m in update.get("messages", []):
-                            artifact = getattr(m, "artifact", None) or {}
-                            yield {
-                                "type": "tool_result",
-                                "name": getattr(m, "name", None),
-                                "ok": bool(artifact.get("ok")),
-                                "error": artifact.get("error"),
-                            }
-                        assumptions = merge_assumptions(
-                            assumptions, update.get("assumptions", [])
-                        )
+    with rt.tracing.request(
+        thread_id=thread_id,
+        user_id=principal.user_id,
+        question=message,
+        tags=[f"model:{rt.settings.agent_model}", f"data:{rt.backend}"],
+    ) as span:
+        try:
+            async with asyncio.timeout(rt.settings.request_timeout_seconds):
+                async for event in _graph_events(rt, inputs, config):
+                    kind = event.pop("_kind")
+                    if kind == "token":
+                        answer_parts.append(event["content"])
+                    elif kind == "tool_call":
+                        tools_used.append(event["name"])
+                    elif kind == "final_message":
+                        final_message = event["text"] or final_message
+                        continue
+                    elif kind == "assumptions":
+                        assumptions = merge_assumptions(assumptions, event["items"])
+                        continue
+                    yield event
 
-    if assumptions:
-        yield {"type": "assumptions", "items": assumptions}
-    yield {
-        "type": "done",
-        "thread_id": thread_id,
-        "tools_used": tools_used,
-        "answer": "".join(answer_parts) or final_message,
-        "assumptions": assumptions,
-    }
+            if assumptions:
+                yield {"type": "assumptions", "items": assumptions}
+            yield {
+                "type": "done",
+                "thread_id": thread_id,
+                "tools_used": tools_used,
+                "answer": "".join(answer_parts) or final_message,
+                "assumptions": assumptions,
+            }
+        except BaseException as exc:  # includes timeouts and client disconnects
+            failure = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            answer = "".join(answer_parts) or final_message
+            span.update(
+                output={"answer": answer, "assumptions": assumptions},
+                metadata={"tools_used": tools_used, "data_backend": rt.backend},
+            )
+            await rt.query_log.record(
+                thread_id=thread_id,
+                request_id=request_id,
+                user_id=principal.user_id,
+                question=message,
+                answer=answer or None,
+                tools_used=tools_used,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                model=rt.settings.agent_model,
+                data_backend=rt.backend,
+                trace_id=rt.tracing.trace_id(),
+                error=failure,
+            )
+
+
+async def _graph_events(
+    rt: Runtime, inputs: dict[str, Any], config: dict[str, Any]
+) -> AsyncIterator[dict[str, Any]]:
+    """Raw graph stream translated into wire events, tagged with a ``_kind``.
+
+    Split out so the tracing and logging wrapper above stays readable.
+    """
+    async for mode, payload in rt.graph.astream(
+        inputs, config, stream_mode=["updates", "messages"]
+    ):
+        if mode == "messages":
+            chunk, meta = payload
+            if meta.get("langgraph_node") == "agent":
+                text = _chunk_text(chunk)
+                if text:
+                    yield {"_kind": "token", "type": "token", "content": text}
+            continue
+
+        for node, update in (payload or {}).items():
+            if node == "agent":
+                for m in update.get("messages", []):
+                    calls = getattr(m, "tool_calls", None) or []
+                    for call in calls:
+                        yield {
+                            "_kind": "tool_call",
+                            "type": "tool_call",
+                            "name": call["name"],
+                            "args": call.get("args", {}),
+                        }
+                    if not calls:
+                        yield {"_kind": "final_message", "text": _chunk_text(m)}
+            elif node == "tools":
+                for m in update.get("messages", []):
+                    artifact = getattr(m, "artifact", None) or {}
+                    yield {
+                        "_kind": "tool_result",
+                        "type": "tool_result",
+                        "name": getattr(m, "name", None),
+                        "ok": bool(artifact.get("ok")),
+                        "error": artifact.get("error"),
+                    }
+                yield {"_kind": "assumptions", "items": update.get("assumptions", [])}
 
 
 @app.post("/chat")
@@ -309,7 +397,9 @@ async def chat(
 
         async def gen() -> AsyncIterator[str]:
             try:
-                async for event in _events(rt, body.message, thread_id):
+                async for event in _events(
+                    rt, body.message, thread_id, principal, request_id
+                ):
                     yield _sse(event)
             except asyncio.TimeoutError:
                 log.warning("request timed out")
@@ -332,7 +422,7 @@ async def chat(
 
     try:
         final: dict[str, Any] = {}
-        async for event in _events(rt, body.message, thread_id):
+        async for event in _events(rt, body.message, thread_id, principal, request_id):
             if event["type"] == "done":
                 final = event
         return ChatResponse(

@@ -13,8 +13,6 @@ from agent.settings import Settings, get_settings
 
 from .conftest import ScriptedChatModel, tool_call_message
 
-pytestmark = pytest.mark.usefixtures("env")
-
 SCRIPT = [
     tool_call_message("rank_airports", {"region": "new_england", "limit": 5}),
     AIMessage(content="**Answer** Boston Logan ranks first at 78.4 of 100."),
@@ -47,7 +45,10 @@ def test_health_reports_backend_model_and_stubs(client: TestClient) -> None:
     assert body["data_ok"] is True
     assert body["checkpointer"] == "memory"
     assert body["data_vintage"]["last_year"] == 2024
-    assert body["stubs"] == {"langfuse_tracing": True, "clerk_auth": True}
+    # No Langfuse keys and no database in the test environment.
+    assert body["tracing"] is False
+    assert body["query_log"] is False
+    assert body["stubs"] == {"clerk_auth": True}
 
 
 def test_root_lists_the_endpoints(client: TestClient) -> None:
