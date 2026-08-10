@@ -18,6 +18,10 @@ dependencies = [
     "psycopg[binary,pool]>=3.2",
     "langfuse>=4.14.3",
     "langchain>=1.0",
+    # Direct runtime users, not transitive: httpx calls the FAA NAS feed,
+    # pyjwt[crypto] verifies Clerk's RS256 session tokens against its JWKS.
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.10",
 ]
 
 [project.optional-dependencies]
