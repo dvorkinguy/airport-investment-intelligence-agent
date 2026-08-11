@@ -21,8 +21,9 @@ session token.
 - Identity comes only from a signature: Clerk session tokens are verified
   against Clerk's JWKS, and caller-supplied user headers are ignored.
 
-Not yet enabled: GitHub secret scanning and push protection, which become
-available on this repository once it is public.
+GitHub secret scanning and push protection are enabled on this repository
+(activated at publication - these controls are available on public
+repositories).
 
 ## Reporting
 
