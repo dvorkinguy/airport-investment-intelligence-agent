@@ -15,14 +15,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   const content = (
     <>
-      <header className="flex h-14 items-center justify-between border-b border-slate-200 px-4 md:px-8">
+      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:px-8">
         <Link href="/" className="text-sm font-semibold tracking-tight text-slate-900">
           Airport Investment Intelligence Agent
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
+        <nav className="flex items-center gap-5 text-sm">
           <Link href="/chat" className="text-slate-600 hover:text-slate-900">
             Chat
           </Link>
+          <a
+            href="/3d"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden text-slate-600 hover:text-slate-900 md:inline"
+          >
+            3D map
+          </a>
+          <a
+            href="https://github.com/dvorkinguy/airport-investment-intelligence-agent"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden text-slate-600 hover:text-slate-900 md:inline"
+          >
+            GitHub
+          </a>
           {clerkEnabled && (
             <>
               <Show when="signed-in">

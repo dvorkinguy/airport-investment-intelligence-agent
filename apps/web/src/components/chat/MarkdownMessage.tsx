@@ -17,7 +17,7 @@ const components: Components = {
     return (
       <th
         className={[
-          "border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700",
+          "border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700 lg:px-2 lg:py-1.5",
           className,
         ]
           .filter(Boolean)
@@ -28,7 +28,7 @@ const components: Components = {
   },
   td: ({ node, ...rest }) => {
     void node;
-    return <td className="px-3 py-2 align-top text-slate-600" {...rest} />;
+    return <td className="px-3 py-2 align-top text-slate-600 lg:px-2 lg:py-1.5" {...rest} />;
   },
   a: ({ node, ...rest }) => {
     void node;
@@ -56,11 +56,22 @@ const components: Components = {
   },
 };
 
+/**
+ * The model streams prose, then a heading, in one run-on line -
+ * "...concentration:## Answer" - which isn't valid ATX heading syntax (a
+ * "#" only starts a heading at the start of a line), so it rendered as
+ * literal text. Insert the paragraph break the model didn't. Frontend-only;
+ * the backend's raw stream is untouched.
+ */
+function fixMidLineHeadings(content: string): string {
+  return content.replace(/([^\n])(#{1,6} )/g, "$1\n\n$2");
+}
+
 export function MarkdownMessage({ content }: { content: string }) {
   return (
     <div className="max-w-none break-words text-[0.95rem] text-slate-700">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
+        {fixMidLineHeadings(content)}
       </ReactMarkdown>
     </div>
   );

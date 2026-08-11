@@ -6,7 +6,6 @@ import {
   isValidElement,
   useMemo,
   useState,
-  type KeyboardEvent,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -76,8 +75,17 @@ export function TableBlock({ node, children }: { node?: unknown; children?: Reac
 
   return (
     <div className="my-3">
+      {/* min-w-[420px] + overflow-x-auto is the mobile fallback (unchanged: a
+          narrow viewport still gets a real horizontal scroll). At lg+, the
+          table switches to a fixed layout sized to its container - columns
+          split the available width evenly and wrap instead of forcing a
+          desktop scrollbar. (Tried shrink-to-content on numeric columns via
+          w-px first - table-fixed takes that as a literal 1px column and
+          overflows the content into its neighbour instead of reflowing, so
+          every numeric column overlapped the next. Reverted; even columns
+          plus wrapping is what actually renders correctly.) */}
       <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full min-w-[420px] border-collapse text-sm">{tableBody}</table>
+        <table className="w-full min-w-[420px] border-collapse text-sm lg:min-w-0 lg:table-fixed">{tableBody}</table>
       </div>
       <TableActions headers={headers} rows={sortedRows} filenameHint="airport-data" />
       {showChart && <AutoChart data={chartData} valueLabel={headers[metricCol] ?? "value"} />}
@@ -112,22 +120,14 @@ function applySort(
       return cloneElement(th, {
         key: th.key ?? col,
         children: (
-          <span
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
             onClick={() => onHeaderClick(col)}
-            onKeyDown={(e: KeyboardEvent) => {
-              if (e.key === "Enter" || e.key === " ") onHeaderClick(col);
-            }}
-            className="inline-flex cursor-pointer select-none items-center gap-1 hover:text-slate-900"
+            className="-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left font-semibold hover:bg-slate-100 hover:text-slate-900"
           >
             {(th.props as { children?: ReactNode }).children}
-            {/* Fixed-width slot rendered in every state (rest/asc/desc) so the
-                header's own width never shifts when sort state changes. */}
-            <span className="inline-flex w-3 shrink-0 items-center justify-center">
-              <SortIndicator direction={active ? sort.direction : null} />
-            </span>
-          </span>
+            <SortIndicator direction={active ? sort.direction : null} />
+          </button>
         ),
       });
     }),
@@ -139,24 +139,26 @@ function applySort(
 }
 
 /**
- * Resting state (direction=null): stacked up/down chevrons at low opacity -
- * discoverable before the first click. Active state: a single chevron
- * pointing the current sort direction, full weight. Same viewBox/stroke
- * geometry in both so the glyph never changes size, only shape.
+ * Bulletproof TanStack/shadcn header pattern: rendered in the initial React
+ * output (no client-only mount, nothing pops in after the fact). Resting
+ * state is a single 16px "arrows up-down" glyph at a readable muted slate
+ * (never below ~60% opacity - a 40%, 10px stacked-chevron version read as
+ * near-invisible dots in live use). Active state swaps to a single, darker
+ * arrow pointing the current direction. Same 16px box in every state, so
+ * the header's width never shifts across rest/asc/desc.
  */
 function SortIndicator({ direction }: { direction: SortState["direction"] }) {
   if (direction === null) {
     return (
-      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true" className="text-slate-400 opacity-40">
-        <path d="M3 5.5 6 2.5 9 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M3 6.5 6 9.5 9 6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true" className="shrink-0 text-slate-400">
+        <path d="M4.5 6.5 8 3l3.5 3.5M4.5 9.5 8 13l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true" className="text-slate-500">
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true" className="shrink-0 text-slate-700">
       <path
-        d={direction === "asc" ? "M3 7 6 4 9 7" : "M3 5 6 8 9 5"}
+        d={direction === "asc" ? "M4 10l4-4 4 4" : "M4 6l4 4 4-4"}
         stroke="currentColor"
         strokeWidth="1.75"
         strokeLinecap="round"

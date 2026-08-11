@@ -184,14 +184,14 @@ export function ChatApp({
           {messages.length === 0 ? (
             <EmptyState onPick={(q) => void send(q)} />
           ) : (
-            <div className="mx-auto flex max-w-3xl flex-col gap-4">
+            <div className="mx-auto flex max-w-3xl flex-col gap-4 lg:max-w-[64rem]">
               {messages.map((m) => (
                 <MessageBubble key={m.id} message={m} onFollowUp={(q) => void send(q)} />
               ))}
             </div>
           )}
         </div>
-        <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 md:px-8">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 md:px-8 lg:max-w-[64rem]">
           <ChatInput onSend={(text) => void send(text)} disabled={sending || backendOk === false} />
         </div>
       </div>

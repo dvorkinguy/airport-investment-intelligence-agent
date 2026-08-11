@@ -12,3 +12,17 @@ body {
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji";
 }
+
+/* Faint blueprint-style grid for the landing hero, faded toward the edges
+   so it reads as texture behind the copy rather than a hard-edged pattern.
+   Lives on its own absolutely-positioned backdrop element (see page.tsx) -
+   mask-image masks an element's ENTIRE rendered output, not just its
+   background, so it must never sit on the same element as the hero copy. */
+.hero-grid {
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.055) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 65% 55% at 50% 0%, black 40%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 0%, black 40%, transparent 90%);
+}

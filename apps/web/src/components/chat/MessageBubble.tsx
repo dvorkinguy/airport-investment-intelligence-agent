@@ -26,7 +26,7 @@ export function MessageBubble({
 
   return (
     <div className="flex justify-start">
-      <div className="min-w-0 max-w-[85%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="min-w-0 max-w-[85%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 shadow-sm lg:max-w-[56rem]">
         {message.toolActivity && <ToolActivity entries={message.toolActivity} />}
         {hasContent ? (
           <MarkdownMessage content={message.content} />
