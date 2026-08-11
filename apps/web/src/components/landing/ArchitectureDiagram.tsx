@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import { Fragment, type SVGProps } from "react";
 
 const STEPS = [
   { label: "You", detail: "Ask in plain English", Icon: IconChat },
@@ -8,25 +8,50 @@ const STEPS = [
   { label: "Public data", detail: "BTS T-100, on-time, FAA", Icon: IconGlobe },
 ];
 
+// Flat card/connector/card/... sequence so CSS grid does the axis switch:
+// one column on mobile (each item its own row, connector rotated to point
+// down) and 5 stretch-height card columns + 4 auto connector columns on
+// desktop (connector sits in the row, never below it).
 export function ArchitectureDiagram() {
   return (
-    <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-start md:justify-between">
+    <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] md:gap-0">
       {STEPS.map((step, i) => (
-        <div key={step.label} className="flex flex-1 items-center gap-3 md:flex-col md:gap-0">
-          <div className="flex flex-1 flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm transition hover:border-slate-300 hover:shadow-md">
-            <step.Icon className="h-5 w-5 text-slate-400" />
-            <div>
-              <p className="text-sm font-semibold text-slate-800">{step.label}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{step.detail}</p>
-            </div>
-          </div>
-          {i < STEPS.length - 1 && (
-            <span className="shrink-0 text-slate-300 md:rotate-90 md:py-1" aria-hidden>
-              &rarr;
-            </span>
-          )}
-        </div>
+        <Fragment key={step.label}>
+          <StepCard step={step} />
+          {i < STEPS.length - 1 && <StepConnector />}
+        </Fragment>
       ))}
+    </div>
+  );
+}
+
+function StepCard({ step }: { step: (typeof STEPS)[number] }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm transition hover:border-emerald-300 hover:shadow-md">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+        <step.Icon className="h-5 w-5 text-slate-500" />
+      </span>
+      <div>
+        <p className="text-sm font-semibold text-slate-800">{step.label}</p>
+        <p className="mt-0.5 text-xs text-slate-500">{step.detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function StepConnector() {
+  return (
+    <div className="flex items-center justify-center md:px-2">
+      <svg
+        viewBox="0 0 16 16"
+        width="14"
+        height="14"
+        fill="none"
+        aria-hidden="true"
+        className="shrink-0 rotate-90 text-slate-300 md:rotate-0"
+      >
+        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </div>
   );
 }
