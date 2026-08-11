@@ -43,17 +43,49 @@ export function TableActions({
       <button
         type="button"
         onClick={() => void handleCopy()}
-        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        className={
+          copied
+            ? "inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
+            : "inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100"
+        }
       >
+        {copied ? <CheckIcon /> : <CopyIcon />}
         {copied ? "Copied" : "Copy"}
       </button>
       <button
         type="button"
         onClick={handleDownload}
-        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100"
       >
+        <DownloadIcon />
         CSV
       </button>
     </div>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 14 14" width="12" height="12" fill="none" aria-hidden="true">
+      <rect x="4.5" y="4.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2.5 9.5V3A1.5 1.5 0 0 1 4 1.5h6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 14 14" width="12" height="12" fill="none" aria-hidden="true">
+      <path d="M3 7.5 6 10.5 11 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 14 14" width="12" height="12" fill="none" aria-hidden="true">
+      <path d="M7 1.5v7.5m0 0L4 6m3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 10.5v1A1.5 1.5 0 0 0 3.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
   );
 }

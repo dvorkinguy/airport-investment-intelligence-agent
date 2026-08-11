@@ -45,6 +45,16 @@ export default function LandingPage() {
         <div className="mt-6">
           <ArchitectureDiagram />
         </div>
+        <p className="mt-4 text-center">
+          <a
+            href="/3d"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-slate-500 underline underline-offset-2 hover:text-slate-700"
+          >
+            Explore the interactive 3D system map
+          </a>
+        </p>
       </section>
 
       <section className="mt-14 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-center text-xs text-slate-500">

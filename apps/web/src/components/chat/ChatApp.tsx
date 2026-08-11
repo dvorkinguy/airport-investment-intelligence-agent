@@ -191,7 +191,7 @@ export function ChatApp({
             </div>
           )}
         </div>
-        <div className="mx-auto w-full max-w-3xl">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 md:px-8">
           <ChatInput onSend={(text) => void send(text)} disabled={sending || backendOk === false} />
         </div>
       </div>

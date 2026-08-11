@@ -41,6 +41,16 @@ export function ThreadSidebar({
           </button>
         ))}
       </nav>
+      <div className="border-t border-slate-200 p-3">
+        <a
+          href="/3d"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-slate-400 hover:text-slate-600"
+        >
+          3D system map
+        </a>
+      </div>
     </aside>
   );
 }

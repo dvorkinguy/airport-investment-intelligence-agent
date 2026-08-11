@@ -122,7 +122,11 @@ function applySort(
             className="inline-flex cursor-pointer select-none items-center gap-1 hover:text-slate-900"
           >
             {(th.props as { children?: ReactNode }).children}
-            {active && <span className="text-slate-400">{sort.direction === "asc" ? "▲" : "▼"}</span>}
+            {/* Fixed-width slot rendered in every state (rest/asc/desc) so the
+                header's own width never shifts when sort state changes. */}
+            <span className="inline-flex w-3 shrink-0 items-center justify-center">
+              <SortIndicator direction={active ? sort.direction : null} />
+            </span>
           </span>
         ),
       });
@@ -132,4 +136,32 @@ function applySort(
   const reorderedBodyRows = permutation.map((i) => bodyRows[i]).filter(Boolean);
 
   return [cloneElement(theadEl, {}, sortedHeadRow), cloneElement(tbodyEl, {}, reorderedBodyRows)];
+}
+
+/**
+ * Resting state (direction=null): stacked up/down chevrons at low opacity -
+ * discoverable before the first click. Active state: a single chevron
+ * pointing the current sort direction, full weight. Same viewBox/stroke
+ * geometry in both so the glyph never changes size, only shape.
+ */
+function SortIndicator({ direction }: { direction: SortState["direction"] }) {
+  if (direction === null) {
+    return (
+      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true" className="text-slate-400 opacity-40">
+        <path d="M3 5.5 6 2.5 9 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M3 6.5 6 9.5 9 6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true" className="text-slate-500">
+      <path
+        d={direction === "asc" ? "M3 7 6 4 9 7" : "M3 5 6 8 9 5"}
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
