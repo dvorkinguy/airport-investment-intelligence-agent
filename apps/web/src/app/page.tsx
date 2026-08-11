@@ -92,6 +92,7 @@ export default function LandingPage() {
             GitHub
           </a>
         </nav>
+        <p className="text-slate-300">&copy; 2026 Guy Dvorkin. All rights reserved.</p>
       </footer>
     </main>
   );
