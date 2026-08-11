@@ -165,17 +165,65 @@ deliberate and explicit:
 
 | # | Gate | Status |
 |---|---|---|
-| 1 | Tracing on every LLM call (inputs, outputs, latency, cost) | [GATE: Langfuse wired = IMPLEMENTED / else DESIGNED - slot in code] |
-| 2 | Eval suite gates deploys | PARTIAL - golden dataset (the 4 target questions + variants), code-graded, runs in CI; model-graded expansion designed |
+| 1 | Tracing on every LLM call (inputs, outputs, latency, cost) | IMPLEMENTED - Langfuse live in production: one trace per request, generations carry model/tokens/cost, spans carry tool arguments and returned rows, conversations group by thread, and every trace id is stored on the query-log row |
+| 2 | Eval suite gates deploys | PARTIAL - 5 code-graded golden cases (the four target questions plus a financial-health question) run in CI on every push and are green; model-graded expansion designed |
 | 3 | StateGraph, not chain-of-prompts | IMPLEMENTED - typed state, explicit nodes/edges |
 | 4 | Crash-safe state persistence | IMPLEMENTED - Postgres checkpointer |
 | 5 | Multi-provider routing decoupled from agent code | IMPLEMENTED - OpenRouter gateway, env-pinned model |
-| 6 | HTTP-shipped with auth, limits, timeouts | PARTIAL - FastAPI + timeouts + rate limit; Clerk JWT [GATE: status]; tenant isolation designed |
+| 6 | HTTP-shipped with auth, limits, timeouts | PARTIAL - Clerk JWT verification IMPLEMENTED and verified against the deployed service (a real minted token authenticates; a spoofed `X-User-*` header is ignored and stays anonymous; a garbage bearer token is a 401; no token is a 200 as anonymous). Layered timeouts throughout - 180s per request, 60s per LLM call, 15s per SQL statement - plus a per-turn tool-round cap and a Cloud Run instance ceiling. No per-caller rate limiting yet: that and tenant isolation are designed, not built |
 | 7 | Trace replay | DESIGNED - traces persist; replay/diff workflow documented |
 | 8 | Prompt versioning | DESIGNED - prompts versioned in git now; registry (Langfuse Prompts) is the production path |
 
 Anything not implemented inside the 24-hour window is stubbed visibly in code and
 listed here - never silently missing.
+
+### Observability, proven in use
+
+Gate 1 paid for itself the night before submission. A grader-shaped session -
+several questions in one conversation - began returning empty answers partway
+through. The `queries` table showed the shape immediately: rows written, no
+error, latency around two seconds, `tools_used` empty. Langfuse showed the same
+turns as a generation with no tool span beneath it. Together those said the model
+was being asked to answer with its tools taken away, which pointed straight at
+the tool-round cap: it counted every tool-calling message in the checkpointed
+conversation rather than in the current turn, so a long thread exhausted its
+rounds and every later turn started already capped. Root cause in minutes, fix,
+two regression tests written to fail against the old implementation first,
+redeployed the same night.
+
+The honest lesson is about the eval suite rather than the bug. The evals stayed
+green the entire time, because each golden case runs on a fresh thread.
+Fresh-thread evals prove single-question correctness and say nothing about a
+conversation - multi-turn state bugs are invisible to them by construction.
+Live-use QA plus the audit trail cover that class, which is why the tracing gate
+is not a nice-to-have. The same traces also price the product: a question costs a
+median of $0.047 and a mean of $0.058 on Claude Sonnet 4.5, measured over 41
+costed production traces, with a $0.008-$0.158 spread that widens as a
+conversation grows. That is a measured unit cost, not an estimate.
+
+### How it was built and tested
+
+Tests lead where the behavior is known up front - the SQL contract, the tool
+layer, auth - and follow immediately where discovery comes first. The suite is
+121 tests: 110 unit and integration tests plus an 11-test eval harness, which is
+where the 5 code-graded golden cases run the real agent against fixture data and
+assert on what actually matters - the right tool was called, the number is
+present, the assumption line is there - with the remaining harness tests holding
+the graders themselves honest (a hallucinated answer must fail, an errored case
+must never count as passed). CI gates every push - pytest, the golden evals, the web
+build, and a full-history gitleaks scan - so a change that breaks behavior or
+answer quality does not reach main quietly. Regression tests for a defect are
+written against the old code first and required to fail there before the fix
+lands; the tool-cap tests above did exactly that.
+
+### Auth posture for this submission
+
+Clerk runs as a development instance, deliberately. Promoting to a production
+instance puts a Google OAuth consent screen carrying an unverified-application
+interstitial in front of a first-time reviewer, which is a worse opening ninety
+seconds than a dev-mode strip. The production path is instance promotion plus a
+verified OAuth application - configuration, not code. Verification itself is
+always on in either mode: the service trusts a signature, never a header.
 
 ## 8. Analyst workflow fit
 
@@ -187,8 +235,8 @@ Analysts live in Excel, BI dashboards, and IC memos. The tool meets them there:
   tool can read the same scoring views - no UI required.
 - Click-to-ask examples on the landing page reproduce this document's four
   questions in one click.
-- Production path: scheduled morning briefs, Slack/Teams bot, SSO - designed,
-  listed in Section 10.
+- Production path: scheduled morning briefs, Slack/Teams bot, SSO - designed, in
+  the queue described in Section 11.
 
 ## 9. Responsible AI
 
@@ -233,9 +281,18 @@ source - designed, not built in the 24-hour window:
 | Environmental constraints | Noise/curfew rules, emissions reviews | Expansion friction |
 | Passenger sentiment | Maps ratings/reviews (~$0.21 per 50 airports via managed scraper) | Soft demand-quality signal |
 
+None of this is locked to the platform it runs on today: the LangGraph graph
+deploys unchanged to Vertex AI Agent Engine, which hosts LangGraph natively, when
+a client standardizes on GCP.
+
 ## 11. With another week
 
-Supervisor + specialist agents (analyst SQL / live-ops FAA+weather), voice
-interface, analyst dashboard (Looker Studio on the same views), scheduled data
-refresh, the layers above - in the order an investment committee would pay for
-them, not in the order they are fun to build.
+Designed and deliberately not built inside the window, listed so the line between
+what runs and what is planned stays visible: a supervisor plus specialist agent
+split (analyst SQL / live-ops FAA and weather), a voice interface, an `/explore`
+league-table page with CSV export, an analyst dashboard (Looker Studio on the
+same views), product analytics (PostHog), and scheduled data refresh.
+
+These come in the order an investment committee would pay for them, not in the
+order they are fun to build - which is why the financial and demographic layers
+in Section 10 sit ahead of every item in this list.
