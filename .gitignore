@@ -7,7 +7,7 @@
 credentials*
 service-account*.json
 
-# Exam brief - Deloitte IP, kept local only (decision F1)
+# Client brief - kept local only (decision F1)
 docs/FDE-Exam-2.pdf
 
 # Internal command-center ops file - never in the repo

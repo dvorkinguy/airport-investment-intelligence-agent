@@ -33,7 +33,7 @@ excluded).
   real capacity). 4 of 679 airports joined zero runway rows (small commuter fields not in the
   runways table) - `max_runway_length_ft` is NULL for those, `runways_count` is 0.
 
-**Verified present:** all 4 exam-named airports (LAX, SNA, ANC, SFO) and all 6 named New England
+**Verified present:** all 4 brief-named airports (LAX, SNA, ANC, SFO) and all 6 named New England
 airports (BOS, BDL, PVD, MHT, BGR, BTV) - full New England set is 24 airports once joined through
 `regions` (see section 3).
 
@@ -65,7 +65,7 @@ nonscheduled/charter passenger (`L`). Measured on the full 2023 file: `CLASS=F` 
 carries 601,564 departures on **249 total passengers** - essentially pure cargo. Anchorage (ANC)
 is a major cargo hub - including `CLASS=G`/`P` would have injected large cargo-only departure
 volume into `long_haul_pct` and flight-growth metrics with zero passenger signal behind it, most
-visibly distorting exactly the airport the exam asks about. **Filtered to `CLASS='F'` only**,
+visibly distorting exactly the airport the technical evaluation asks about. **Filtered to `CLASS='F'` only**,
 consistent with `data/airports.csv`'s own `scheduled_service` scoping.
 
 **Origin filter:** kept only if `ORIGIN` is one of the 679 tracked airports in `data/airports.csv`
@@ -83,7 +83,7 @@ identical, MAX is a defensive tie-break, not a real choice).
 
 **Result:** 529,559 + 549,731 + 571,097 = 1,650,387 raw rows -> 1,124,393 kept (CLASS=F, origin
 tracked) -> **584,498 rows** in `data/bts_t100.csv` after aircraft-type aggregation. Spot-checked
-non-empty for every exam-named airport: LAX 14,259 rows, SFO 9,385, BOS 9,635, BDL 2,741, SNA
+non-empty for every brief-named airport: LAX 14,259 rows, SFO 9,385, BOS 9,635, BDL 2,741, SNA
 2,352, ANC 2,363 (route-carrier-month combinations, 2023-2025 combined).
 
 Dead ends hit while scripting the form (recorded for anyone re-running this later):
@@ -130,8 +130,8 @@ see section 5.]*
 Full DDL: [../../db/schema.sql](../../db/schema.sql), [../../db/views.sql](../../db/views.sql).
 Decisions not obvious from the SQL comments alone:
 
-- **Regions = US Census Bureau divisions (9-way), not the coarser 4-way regions.** The exam's
-  own tool contract needs a `region` value literally called `new_england` - that's Census
+- **Regions = US Census Bureau divisions (9-way), not the coarser 4-way regions.** The technical
+  evaluation's own tool contract needs a `region` value literally called `new_england` - that's Census
   *division* vocabulary, not Census *region* vocabulary (which would only have "Northeast"). All
   50 states + DC mapped; New England = CT, ME, MA, NH, RI, VT exactly as specified.
 - **Airport activity = origin-based T-100 segments.** `v_airport_metrics` counts passengers/
@@ -140,16 +140,16 @@ Decisions not obvious from the SQL comments alone:
   "activity at this airport" without double-counting the reverse leg. Stated explicitly because
   a destination-based or origin+destination-summed definition would give different (still
   defensible) numbers - this is a modeling choice, not the only correct one.
-- **Long-haul threshold:** the exam-stated >=1500 mile assumption, applied to `departures`
+- **Long-haul threshold:** the brief-stated >=1500 mile assumption, applied to `departures`
   count (not passengers) - i.e. long_haul_pct answers "what share of flights out of here are
   long-haul," not "what share of travelers."
 - **`v_opportunity_score` is a single current-state score (latest year only), not a time
   series** - matches the exact column list Terminal A's tool contract specified (no `year`
   column). Normalization population is airports with >=100k annual passengers in that latest
-  year, per the exam brief; missing growth/delay data defaults to neutral (0) rather than
+  year, per the client brief; missing growth/delay data defaults to neutral (0) rather than
   excluding the airport from ranking.
 - **`c_infra` is inverted:** fewer/shorter runways -> higher score, because that reads as
-  *physically constrained -> stronger expansion-investment signal*, per the exam brief's own
+  *physically constrained -> stronger expansion-investment signal*, per the client brief's own
   framing of the metric.
 - **`v_unmet_demand_est` calibration constants are judgment calls, not fitted:** an 0.80 load
   factor "comfort threshold" (planes fuller than that are assumed to be turning away marginal
@@ -184,7 +184,7 @@ Load complete.
 All required sanity checks run live against the loaded database and PASS:
 
 - **New England join** (`airports JOIN regions ON state`, `WHERE region = 'new_england'`): **24
-  airports**, including all 6 named in the exam brief (BOS, BDL, PVD, MHT, BGR, BTV).
+  airports**, including all 6 named in the client brief (BOS, BDL, PVD, MHT, BGR, BTV).
 - **LAX vs SNA rows exist** in both `v_airport_metrics` and `v_congestion`, all 3 years each.
   Real, plausible numbers: LAX 2025 - 36.7M passengers, 81.7% load factor, 48.3% long-haul
   departures, 18.8% delay rate. SNA 2025 - 5.5M passengers, 79.9% load factor, **only 13.1%
@@ -206,7 +206,7 @@ All required sanity checks run live against the loaded database and PASS:
   years, correctly floored to contribute ~0 rather than a negative estimate) - the three driver
   columns make the estimate auditable exactly as intended, not a black-box number.
 
-No blockers, no silent failures. All 4 exam-question-relevant checks the command center specified
+No blockers, no silent failures. All 4 checks the command center specified for the target questions
 (LAX/SNA, ANC, SFO, New England) pass against real data end to end.
 
 ## 6. Automated view checks

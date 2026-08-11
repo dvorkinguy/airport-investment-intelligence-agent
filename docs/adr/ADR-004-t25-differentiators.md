@@ -65,7 +65,7 @@ cost, fare-mix shift, and demand elasticity - stated here and in the view's `COM
 600 rows (narrower than either source alone, since it requires both `v_unmet_demand_est`
 2023-2025 coverage AND `airport_financials` 2023-2024 coverage to overlap).
 
-**Sanity check, all 10 exam-named airports, both years, non-null:**
+**Sanity check, all 10 brief-named airports, both years, non-null:**
 
 | Airport | 2023 roi_proxy | 2024 roi_proxy | Why |
 |---|---|---|---|
@@ -76,7 +76,7 @@ cost, fare-mix shift, and demand elasticity - stated here and in the view's `COM
 | ANC, BDL, BGR, BTV, MHT | **negative** | **negative** | `net_rev_per_enplanement` is negative at these airports (operating at a loss per enplanement) - unmet demand there is not unambiguously good news for the airport's *current* finances, a genuinely interesting wrinkle the raw estimate surfaces rather than hides |
 
 **locid == iata assumption:** FAA's Location ID and BTS/OurAirports IATA code are treated as the
-same value for the join. Verified true for every airport checked above (all 10 exam-named
+same value for the join. Verified true for every airport checked above (all 10 brief-named
 airports). Not independently verified for the full national set - a locid that doesn't match its
 `airports.iata` simply fails to join and is silently absent from `v_roi_proxy`, not treated as an
 error requiring a fix.

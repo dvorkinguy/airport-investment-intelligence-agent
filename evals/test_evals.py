@@ -58,7 +58,7 @@ def test_the_suite_covers_the_four_exam_questions_plus_the_financial_check() -> 
         "q2_lax_vs_sna_congestion",
         "q3_anchorage_long_haul",
         "q4_sfo_unmet_demand",
-        # Not an exam question: the T2.5 differentiator (ADR-004), guarding that a
+        # Not one of the four target questions: the T2.5 differentiator (ADR-004), guarding that a
         # capacity case gets tested against the airport's actual finances.
         "q5_bangor_financial_health",
     }

@@ -64,7 +64,7 @@ CREATE TABLE bts_ontime (
 );
 CREATE INDEX idx_bts_ontime_airport_year ON bts_ontime (airport_iata, year);
 
--- New England row set required by the exam's region filter, CT/ME/MA/NH/RI/VT ->
+-- New England row set required by the brief's region filter, CT/ME/MA/NH/RI/VT ->
 -- new_england. Full 9-division US Census Bureau mapping (50 states + DC).
 INSERT INTO regions (state, region) VALUES
     ('CT', 'new_england'), ('ME', 'new_england'), ('MA', 'new_england'),

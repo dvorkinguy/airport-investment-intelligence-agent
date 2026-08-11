@@ -8,7 +8,7 @@
 credentials*
 service-account*.json
 
-# Deloitte exam brief - local only (decision F1)
+# Client brief - kept local only (decision F1)
 docs/FDE-Exam-2.pdf
 _command-center.md
 

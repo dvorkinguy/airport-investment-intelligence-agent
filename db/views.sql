@@ -52,7 +52,7 @@ WINDOW w AS (PARTITION BY iata ORDER BY year);
 COMMENT ON VIEW v_airport_metrics IS
     'YoY growth is NULL for an airport''s first year in the data (no prior-year base) - '
     'that is a real "no comparison available" signal, not zero growth. Long-haul threshold '
-    'is the exam-stated >=1500mi assumption, applied to departures (not passengers).';
+    'is the brief-stated >=1500mi assumption, applied to departures (not passengers).';
 
 -- ============================================================================
 -- v_congestion: arrival delay signal per airport per year.
@@ -77,7 +77,7 @@ COMMENT ON VIEW v_congestion IS
 -- year with data only - a "where to look now" score, not a time series).
 -- Weights .30 pax growth / .25 load factor / .20 congestion / .15 flight growth /
 -- .10 infra constraint, each a 0-100 percentile rank WITHIN the population of
--- airports at >=100k annual passengers in that latest year (the exam-stated
+-- airports at >=100k annual passengers in that latest year (the brief-stated
 -- normalization population - tiny airports don't distort the percentile scale).
 -- ============================================================================
 CREATE VIEW v_opportunity_score AS

@@ -2,7 +2,7 @@
 #   gcloud run deploy airport-agent --source .
 #
 # Secrets are never baked in - Cloud Run mounts them from Secret Manager as env,
-# and .dockerignore keeps .env and the exam PDF out of the context entirely.
+# and .dockerignore keeps .env and the client-brief PDF out of the context entirely.
 #
 # Deliberately NO HEALTHCHECK instruction: Cloud Run ignores Docker HEALTHCHECK
 # entirely and runs its own startup and liveness probes against the container

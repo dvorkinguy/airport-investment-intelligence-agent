@@ -12,7 +12,7 @@ question: does Apify add anything on top of that core, and if so, where and at w
 | Tier 3 — passenger-sentiment signal (rating, review count) for ~50 major airports | **Yes, optional** | Genuine value-add (no other locked source has a sentiment signal), and trivially cheap (~$0.08–$0.21 total) |
 
 Bottom line: don't build or budget for a scraper for Tier 1. Reserve Apify for the Tier 3
-enrichment, and only if time remains after the deterministic scoring core is working — the exam
+enrichment, and only if time remains after the deterministic scoring core is working — the client
 brief itself says to prioritize clarity and reasoning over completeness.
 
 ## 1. Airport location coverage — no scraper needed
@@ -45,7 +45,7 @@ All three named candidate sources checked live on 2026-08-10:
 | Runway rows joined to a US airport | 26,558 |
 | ...of which `length_ft` populated | 26,545 |
 
-Every airport named in the exam's example questions is covered: SFO, LAX, Santa Ana (SNA), Anchorage
+Every airport named in the four target questions is covered: SFO, LAX, Santa Ana (SNA), Anchorage
 (ANC), and the full New England set all carry IATA/ICAO codes, lat/lon, state, and joined runway
 length data in this one free file pair.
 

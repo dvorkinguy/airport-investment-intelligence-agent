@@ -351,7 +351,7 @@ const NODES = [
   /* --- edge / UI -------------------------------------------------------- */
   { id:'ui', pri:0, label:'Next.js chat UI', sub:'apps/web', tier:'edge', pos:[0,22,0], size:[26,5.5,11], shape:'box', status:'local', badgeText:'BUILT - DEPLOY PLANNED',
     plain:'The chat screen. It takes the question, streams the answer back token by token, and shows the numbers, tables and assumptions the agent used.',
-    tech:'Next.js 15 App Router + Tailwind, TypeScript strict, in <code>apps/web</code>. Landing page is public and carries the four exam questions as click-to-ask cards; <code>/chat</code> renders the SSE token stream with GFM tables, an assumptions footnote and a local thread sidebar. Built and running locally - the Vercel project and the airport.guydvorkin.com CNAME are Tier 2 and not up yet.',
+    tech:'Next.js 15 App Router + Tailwind, TypeScript strict, in <code>apps/web</code>. Landing page is public and carries the four target questions as click-to-ask cards; <code>/chat</code> renders the SSE token stream with GFM tables, an assumptions footnote and a local thread sidebar. Built and running locally - the Vercel project and the airport.guydvorkin.com CNAME are Tier 2 and not up yet.',
     adr:'ADR-002 (Vercel role; Cloudflare deliberately not in front)' },
 
   { id:'clerk', pri:1, label:'Clerk + Turnstile', sub:'Google / magic link', tier:'cross', pos:[-50,22,-34], size:[19,5,9], shape:'box',
@@ -459,7 +459,7 @@ const NODES = [
     adr:'ADR-004 #1 (HHI, cites Moody\'s airport revenue bond methodology)' },
   { id:'v_roi_proxy', pri:1, label:'v_roi_proxy', sub:'estimate on estimate', tier:'data', pos:[20,-19,24], size:[16,3.6,7], shape:'chip', stagger:true,
     plain:'A rough dollar value for unmet demand: what it could be worth if the airport captured it, given how it currently earns per passenger.',
-    tech:'<code>est_unmet_pax &times; net_rev_per_enplanement</code>. An estimate built on an estimate - ignores capacity cost, fare mix and demand elasticity, stated in the view comment and in every answer that cites it. At several exam airports (ANC, BDL, BGR, BTV, MHT) net revenue per enplanement is negative, so a positive roi_proxy there is not unambiguous good news.',
+    tech:'<code>est_unmet_pax &times; net_rev_per_enplanement</code>. An estimate built on an estimate - ignores capacity cost, fare mix and demand elasticity, stated in the view comment and in every answer that cites it. At several brief-named airports (ANC, BDL, BGR, BTV, MHT) net revenue per enplanement is negative, so a positive roi_proxy there is not unambiguous good news.',
     adr:'ADR-004 #2 (joins v_unmet_demand_est + airport_financials)' },
 
   { id:'ckpt', pri:1, label:'LangGraph checkpoints', sub:'AsyncPostgresSaver', tier:'data', pos:[-28,-29,0], size:[22,4.4,9], shape:'box',
@@ -551,7 +551,7 @@ const BOXES = [
 ];
 
 /* ==========================================================================
-   3. The animated request - exam question 1, hop by hop.
+   3. The animated request - target question 1, hop by hop.
    ========================================================================== */
 const Q1 = 'Which airports in New England are the strongest candidates for terminal expansion investment? Rank them and explain the ranking.';
 

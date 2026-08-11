@@ -122,7 +122,7 @@ than raising - a dead external feed cannot break an answer built on SQL.
 
 ```bash
 uv run pytest                      # unit + integration, no network, no database
-uv run python -m evals.run_evals   # 4 exam questions + the financial check, live model
+uv run python -m evals.run_evals   # the four target questions + the financial check, live model
 uv run python -m evals.run_evals --case q3 --verbose
 ```
 
@@ -255,7 +255,7 @@ Secrets live in Secret Manager (`openrouter-api-key`, `database-url`,
 `langfuse-public-key`, `langfuse-secret-key`, `clerk-secret-key`) and are mounted
 as environment variables. The service runs as a dedicated least-privilege service account with
 `secretAccessor` on those five secrets and nothing else - not the default
-compute account. `.dockerignore` keeps `.env` and the exam PDF out of the build
+compute account. `.dockerignore` keeps `.env` and the client-brief PDF out of the build
 context, so neither can reach an image layer.
 
 ## Stubbed on purpose
