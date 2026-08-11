@@ -47,7 +47,7 @@
   }
   #brand{display:flex;flex-direction:column;gap:2px;min-width:0}
   #brand h1{margin:0;font-size:14px;font-weight:650;letter-spacing:.2px;white-space:nowrap}
-  #brand p{margin:0;font-size:11px;color:var(--fg-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #brand p{margin:0;font-size:12px;color:var(--fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 
   button.btn{
@@ -187,7 +187,11 @@
     <p>Live system map &middot; source of truth: docs/architecture.md, ADR-001/002/003/004, services/agent/graph.py</p>
   </div>
   <div id="actions">
-    <button class="btn" id="btnRun" type="button">Run a query</button>
+    <button class="btn" id="btnPlay" type="button">Play</button>
+    <button class="btn" id="btnStop" type="button">Stop</button>
+    <button class="btn" id="btnStepBack" type="button">Step back</button>
+    <button class="btn" id="btnStepFwd" type="button">Step forward</button>
+    <button class="btn" id="btnAnimReset" type="button">Reset</button>
     <button class="btn" id="btnOrbit" type="button">Auto-orbit</button>
     <button class="btn" id="btnReset" type="button">Reset view</button>
   </div>
@@ -1057,35 +1061,73 @@ renderer.domElement.addEventListener('pointermove', e => {
 });
 
 /* --- buttons ------------------------------------------------------------ */
-const btnRun = document.getElementById('btnRun');
+const btnPlay = document.getElementById('btnPlay');
+const btnStop = document.getElementById('btnStop');
+const btnStepBack = document.getElementById('btnStepBack');
+const btnStepFwd = document.getElementById('btnStepFwd');
+const btnAnimReset = document.getElementById('btnAnimReset');
 const btnOrbit = document.getElementById('btnOrbit');
 const btnReset = document.getElementById('btnReset');
 
-let running = false, stepIdx = 0, stepT = 0, stepDur = 1;
+let running = false, paused = false, stepIdx = 0, stepT = 0, stepDur = 1;
 let activeFrom = null, activeTo = null;   // the hop in flight - its labels never get decluttered away
 
+function updatePlayPauseButton () {
+  const playing = running && !paused;
+  btnPlay.textContent = playing ? 'Pause' : 'Play';
+  btnPlay.classList.toggle('on', playing);
+}
 function startRun () {
-  running = true; stepIdx = 0; stepT = 0;
+  running = true; paused = false; stepIdx = 0; stepT = 0;
   packet.visible = true;
   trailBuf.length = 0;
   capEl.classList.add('show');
-  btnRun.classList.add('on');
-  btnRun.textContent = 'Stop';
   hintEl.classList.add('hide');
   beginStep();
+  updatePlayPauseButton();
 }
 function stopRun () {
-  running = false;
+  running = false; paused = false;
   activeFrom = activeTo = null;
   packet.visible = false;
   trail.forEach(s => { s.visible = false; });
   capEl.classList.remove('show');
-  btnRun.classList.remove('on');
-  btnRun.textContent = 'Run a query';
   edgeRecords.forEach(e => { e.pulse = 0; e.obj.material.opacity = e.base; });
   nodeById.forEach(n => { n.pulse = 0; });
+  updatePlayPauseButton();
 }
-btnRun.addEventListener('click', () => running ? stopRun() : startRun());
+function togglePlayPause () {
+  if (!running) { startRun(); return; }
+  paused = !paused;
+  updatePlayPauseButton();
+}
+function goToStep (idx) {
+  running = true; paused = true;
+  packet.visible = true;
+  capEl.classList.add('show');
+  hintEl.classList.add('hide');
+  trailBuf.length = 0;
+  trail.forEach(s => { s.visible = false; });
+  stepIdx = ((idx % STEPS.length) + STEPS.length) % STEPS.length;
+  beginStep();
+  curCurve.getPoint(0, packet.position);
+  updatePlayPauseButton();
+}
+function doAnimReset () {
+  controls.autoRotate = false;
+  btnOrbit.classList.remove('on');
+  camera.position.copy(CAM_HOME);
+  controls.target.copy(CAM_TARGET);
+  controls.update();
+  fitCamera();
+  goToStep(0);
+}
+
+btnPlay.addEventListener('click', togglePlayPause);
+btnStop.addEventListener('click', stopRun);
+btnStepBack.addEventListener('click', () => goToStep(stepIdx - 1));
+btnStepFwd.addEventListener('click', () => goToStep(stepIdx + 1));
+btnAnimReset.addEventListener('click', doAnimReset);
 
 btnOrbit.addEventListener('click', () => {
   controls.autoRotate = !controls.autoRotate;
@@ -1100,8 +1142,12 @@ btnReset.addEventListener('click', () => {
   fitCamera();
 });
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { infoEl.classList.remove('show'); selectNode(null); }
-  if (e.key === ' ' && e.target === document.body) { e.preventDefault(); running ? stopRun() : startRun(); }
+  if (e.key === 'Escape') { infoEl.classList.remove('show'); selectNode(null); return; }
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.key === ' ') { e.preventDefault(); togglePlayPause(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); goToStep(stepIdx + 1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); goToStep(stepIdx - 1); }
 });
 
 /* --- step machinery ----------------------------------------------------- */
@@ -1216,7 +1262,7 @@ function tick () {
   const dt = Math.min(clock.getDelta(), 0.05);
   const now = performance.now() * 0.001;
 
-  if (running) advance(dt);
+  if (running && !paused) advance(dt);
 
   // node pulse decay + selection ring
   nodeById.forEach(rec => {
@@ -1304,6 +1350,16 @@ window.addEventListener('resize', resize);
 window.__booted = true;
 document.getElementById('fallback').classList.remove('show');
 fitCamera();
+
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (REDUCED_MOTION) {
+  updatePlayPauseButton();
+} else {
+  controls.autoRotate = true;
+  btnOrbit.classList.add('on');
+  startRun();
+}
+
 tick();
 </script>
 </body>
