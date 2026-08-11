@@ -7,11 +7,13 @@ export function ThreadSidebar({
   activeId,
   onSelect,
   onNew,
+  userId,
 }: {
   threads: ThreadRecord[];
   activeId: string;
   onSelect: (id: string) => void;
   onNew: () => void;
+  userId: string;
 }) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60 md:flex">
@@ -50,7 +52,7 @@ export function ThreadSidebar({
                   // refreshThreads() call, and a click landing between the
                   // final SSE token and that state update would otherwise
                   // export a thread missing its just-finished answer.
-                  const fresh = getThread(t.id) ?? t;
+                  const fresh = getThread(userId, t.id) ?? t;
                   downloadThreadExport(fresh.firstQuestion, fresh.messages);
                 }}
                 className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100"

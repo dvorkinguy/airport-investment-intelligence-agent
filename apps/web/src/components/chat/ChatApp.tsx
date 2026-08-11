@@ -13,8 +13,11 @@ import { ChatInput } from "./ChatInput";
 import { BackendDownBanner } from "./BackendDownBanner";
 
 export function ChatApp({
+  userId = "anonymous",
   getAuthToken,
 }: {
+  /** Clerk userId - namespaces localStorage thread/message storage so one browser's signed-in users never see each other's threads. Defaults to "anonymous" for authless mode (see ChatAppWithAuth for the signed-in path). */
+  userId?: string;
   /** Clerk's useAuth().getToken - only passed when signed in (see ChatAppWithAuth). Called fresh per send since session tokens are short-lived. */
   getAuthToken?: () => Promise<string | null>;
 } = {}) {
@@ -30,7 +33,7 @@ export function ChatApp({
   const autoSentRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const refreshThreads = useCallback(() => setThreads(listThreads()), []);
+  const refreshThreads = useCallback(() => setThreads(listThreads(userId)), [userId]);
 
   useEffect(() => {
     refreshThreads();
@@ -62,8 +65,8 @@ export function ChatApp({
       };
 
       function persist(msgs: ChatMessage[]) {
-        const existing = getThread(activeThreadId);
-        upsertThread({
+        const existing = getThread(userId, activeThreadId);
+        upsertThread(userId, {
           id: activeThreadId,
           firstQuestion: existing?.firstQuestion ?? text,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
@@ -149,7 +152,7 @@ export function ChatApp({
         setSending(false);
       }
     },
-    [threadId, refreshThreads, getAuthToken],
+    [threadId, refreshThreads, getAuthToken, userId],
   );
 
   useEffect(() => {
@@ -169,7 +172,7 @@ export function ChatApp({
   }
 
   function handleSelectThread(id: string) {
-    const thread = getThread(id);
+    const thread = getThread(userId, id);
     if (!thread) return;
     setThreadId(id);
     setMessages(thread.messages);
@@ -177,7 +180,13 @@ export function ChatApp({
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
-      <ThreadSidebar threads={threads} activeId={threadId} onSelect={handleSelectThread} onNew={handleNewThread} />
+      <ThreadSidebar
+        threads={threads}
+        activeId={threadId}
+        onSelect={handleSelectThread}
+        onNew={handleNewThread}
+        userId={userId}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         {backendOk === false && <BackendDownBanner onRetry={probeHealth} />}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
