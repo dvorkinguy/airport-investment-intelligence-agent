@@ -1,5 +1,9 @@
 # Airport Investment Intelligence Agent
 
+[![ci](https://github.com/dvorkinguy/airport-investment-intelligence-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dvorkinguy/airport-investment-intelligence-agent/actions/workflows/ci.yml)
+[![security](https://github.com/dvorkinguy/airport-investment-intelligence-agent/actions/workflows/security.yml/badge.svg)](https://github.com/dvorkinguy/airport-investment-intelligence-agent/actions/workflows/security.yml)
+[![license](https://img.shields.io/badge/license-proprietary-blue)](LICENSE)
+
 An AI agent that helps investment analysts identify US airports where modernization
 and expansion are most likely to pay off.
 
@@ -72,8 +76,21 @@ Prove it works:
 
 ```bash
 uv run pytest                      # unit + integration - offline, no keys needed
-uv run python -m evals.run_evals   # the 4 exam questions, code-graded, live model
+uv run python -m evals.run_evals   # 5 golden cases, code-graded, live model
 ```
 
-Security posture: no secrets in code or git history, gitleaks pre-commit + CI,
-GitHub secret scanning + push protection.
+## Engineering practice
+
+- Trunk-based on `main`, with CI gating every push and pull request: pytest, the
+  golden evals, the web build, and a full-history `gitleaks` scan.
+- Secrets are caught before they land - `gitleaks` runs as a local pre-commit
+  hook, and the same tool runs again in CI as the second net.
+- Decisions are recorded as ADRs in [docs/adr/](docs/adr/), so the reasoning
+  trail survives, not just the outcome.
+- Agent changes are eval-driven: a defect gets a regression test written against
+  the old code and proven to fail there before the fix lands.
+- Verified states are tagged (for example `night-close-verified-2026-08-10`), so
+  a known-good commit stays addressable.
+
+Security posture and reporting: [SECURITY.md](SECURITY.md). Licensing:
+[LICENSE](LICENSE) - shared for evaluation, no reuse rights granted.
