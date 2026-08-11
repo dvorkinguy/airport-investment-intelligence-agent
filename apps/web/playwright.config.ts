@@ -33,5 +33,9 @@ export default defineConfig({
       CLERK_SECRET_KEY: "",
     },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-390", use: { ...devices["iPhone 12"] } },
+    { name: "mobile-780", use: { ...devices["Desktop Chrome"], viewport: { width: 780, height: 844 } } },
+  ],
 });

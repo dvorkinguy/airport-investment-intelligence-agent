@@ -179,7 +179,7 @@ export function ChatApp({
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-[calc(100dvh-3.5rem)]">
       <ThreadSidebar
         threads={threads}
         activeId={threadId}
@@ -189,7 +189,11 @@ export function ChatApp({
       />
       <div className="flex min-w-0 flex-1 flex-col">
         {backendOk === false && <BackendDownBanner onRetry={probeHealth} />}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+        <div
+          ref={scrollRef}
+          data-testid="messages-scroll"
+          className="flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 md:px-8"
+        >
           {messages.length === 0 ? (
             <EmptyState onPick={(q) => void send(q)} />
           ) : (
@@ -200,7 +204,7 @@ export function ChatApp({
             </div>
           )}
         </div>
-        <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 md:px-8 lg:max-w-[64rem]">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 md:px-8 lg:max-w-[64rem]">
           <ChatInput onSend={(text) => void send(text)} disabled={sending || backendOk === false} />
         </div>
       </div>
@@ -210,18 +214,21 @@ export function ChatApp({
 
 function EmptyState({ onPick }: { onPick: (q: string) => void }) {
   return (
-    <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center text-center">
+    <div className="mx-auto flex h-full w-full min-w-0 max-w-xl flex-col items-center justify-center text-center">
       <p className="text-lg font-medium text-slate-800">Ask an investment question about US airports.</p>
       <p className="mt-1 text-sm text-slate-500">
         Every number is pulled from a deterministic SQL view - never invented.
       </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
+      <div
+        data-testid="empty-state-chips"
+        className="mt-6 flex w-full max-w-[22rem] flex-col items-center gap-2 sm:max-w-full sm:flex-row sm:flex-wrap sm:justify-center"
+      >
         {DEFAULT_FOLLOW_UPS.map((q) => (
           <button
             key={q}
             type="button"
             onClick={() => onPick(q)}
-            className="max-w-full break-words rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-emerald-300 hover:text-emerald-700"
+            className="max-w-full whitespace-normal break-words rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-emerald-300 hover:text-emerald-700"
           >
             {q}
           </button>

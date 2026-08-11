@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { ClerkProvider, Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { BrandMark } from "@/components/BrandMark";
@@ -20,17 +20,30 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const clerkEnabled = isClerkEnabled();
 
   const content = (
     <>
-      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:px-8">
-        <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200 bg-white/85 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] backdrop-blur supports-[backdrop-filter]:bg-white/70 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))]">
+        <Link
+          href="/"
+          className="flex min-w-0 items-center gap-2 text-sm font-semibold tracking-tight text-slate-900"
+        >
           <BrandMark className="h-5 w-5 shrink-0" />
-          Airport Investment Intelligence Agent
+          <span className="truncate">
+            <span className="sm:hidden">Airport Intelligence</span>
+            <span className="hidden sm:inline">Airport Investment Intelligence Agent</span>
+          </span>
         </Link>
-        <nav className="flex items-center gap-5 text-sm">
+        <nav className="flex items-center gap-3 text-sm sm:gap-5">
           <Link href="/chat" className="text-slate-600 hover:text-slate-900">
             Chat
           </Link>
@@ -38,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             href="/3d"
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden text-slate-600 hover:text-slate-900 md:inline"
+            className="text-slate-600 hover:text-slate-900"
           >
             3D map
           </a>
@@ -59,7 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <SignInButton mode="modal">
                   <button
                     type="button"
-                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+                    className="shrink-0 whitespace-nowrap rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
                   >
                     Sign in
                   </button>

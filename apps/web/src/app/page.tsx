@@ -58,9 +58,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mt-16">
+      <section className="mt-10 md:mt-16">
         <h2 className="text-center text-sm font-medium uppercase tracking-wide text-slate-400">How it works</h2>
-        <div className="mt-6">
+        <div className="mt-4 md:mt-6">
           <ArchitectureDiagram />
         </div>
       </section>

@@ -14,7 +14,7 @@ const STEPS = [
 // desktop (connector sits in the row, never below it).
 export function ArchitectureDiagram() {
   return (
-    <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] md:gap-0">
+    <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] md:gap-0">
       {STEPS.map((step, i) => (
         <Fragment key={step.label}>
           <StepCard step={step} />
@@ -27,11 +27,11 @@ export function ArchitectureDiagram() {
 
 function StepCard({ step }: { step: (typeof STEPS)[number] }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm transition hover:border-emerald-300 hover:shadow-md">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+    <div className="flex flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md md:flex-col md:gap-2 md:px-4 md:py-4 md:text-center">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 md:h-9 md:w-9">
         <step.Icon className="h-5 w-5 text-slate-500" />
       </span>
-      <div>
+      <div className="min-w-0">
         <p className="text-sm font-semibold text-slate-800">{step.label}</p>
         <p className="mt-0.5 text-xs text-slate-500">{step.detail}</p>
       </div>
@@ -44,11 +44,9 @@ function StepConnector() {
     <div className="flex items-center justify-center md:px-2">
       <svg
         viewBox="0 0 16 16"
-        width="14"
-        height="14"
         fill="none"
         aria-hidden="true"
-        className="shrink-0 rotate-90 text-slate-300 md:rotate-0"
+        className="h-2.5 w-2.5 shrink-0 rotate-90 text-slate-300 md:h-3.5 md:w-3.5 md:rotate-0"
       >
         <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
