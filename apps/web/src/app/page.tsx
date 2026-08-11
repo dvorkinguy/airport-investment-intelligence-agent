@@ -2,15 +2,14 @@ import Link from "next/link";
 import { QuestionCard } from "@/components/landing/QuestionCard";
 import { ArchitectureDiagram } from "@/components/landing/ArchitectureDiagram";
 import { AnswerPreviewCard } from "@/components/landing/AnswerPreviewCard";
+import { TechStrip } from "@/components/landing/TechStrip";
 
-const EXAM_QUESTIONS = [
+const ANALYST_QUESTIONS = [
   "Which airports in New England are strong candidates for terminal expansion?",
   "Compare congestion at LAX and SNA.",
   "What percentage of flights out of Anchorage are long-haul?",
   "What is the estimated unmet flight demand at SFO, and why?",
 ];
-
-const BUILT_ON = ["Next.js", "FastAPI + LangGraph", "Neon Postgres", "Cloud Run", "Langfuse", "Clerk"];
 
 export default function LandingPage() {
   return (
@@ -46,20 +45,15 @@ export default function LandingPage() {
         <AnswerPreviewCard />
       </section>
 
-      <section className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-500">
-        <span className="text-slate-400">Built on</span>
-        {BUILT_ON.map((name) => (
-          <span key={name}>{name}</span>
-        ))}
-      </section>
+      <TechStrip />
 
       <section className="mt-14">
         <h2 className="text-center text-sm font-medium uppercase tracking-wide text-slate-400">
-          Try one of the exam questions
+          Try one of these questions
         </h2>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {EXAM_QUESTIONS.map((q) => (
-            <QuestionCard key={q} question={q} />
+          {ANALYST_QUESTIONS.map((q, i) => (
+            <QuestionCard key={q} question={q} index={i} />
           ))}
         </div>
       </section>

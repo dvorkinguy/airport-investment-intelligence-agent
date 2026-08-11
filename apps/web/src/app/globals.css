@@ -26,3 +26,39 @@ body {
   mask-image: radial-gradient(ellipse 65% 55% at 50% 0%, black 40%, transparent 90%);
   -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 0%, black 40%, transparent 90%);
 }
+
+/* Question-card spotlight sweep: a single glow "hands off" between cards
+   via one shared keyframe + a per-card positive animation-delay (index *
+   3s) - see QuestionCard.tsx. Neutral stops match border-slate-200 /
+   shadow-sm exactly so there's no pop when the animation starts/loops. */
+@keyframes question-card-glow {
+  0%,
+  12.5%,
+  100% {
+    border-color: rgb(226 232 240);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+  4% {
+    border-color: rgb(110 231 183);
+    box-shadow: 0 6px 16px -4px rgb(16 185 129 / 0.25);
+  }
+}
+
+.question-card-sweep {
+  animation: question-card-glow 12s ease-in-out infinite;
+}
+
+/* Swap to `none` (not `paused`) on hover/focus: a paused animation still
+   wins the cascade over the hover:border-emerald-300 utility, which would
+   fight the card's existing hover treatment. Removing it lets that utility
+   apply cleanly; the sweep restarts from its neutral state on focus-out. */
+.question-card-sweep:hover,
+.question-card-sweep:focus-visible {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-card-sweep {
+    animation: none;
+  }
+}

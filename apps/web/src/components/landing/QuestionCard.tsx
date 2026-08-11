@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-export function QuestionCard({ question }: { question: string }) {
+export function QuestionCard({ question, index = 0 }: { question: string; index?: number }) {
   return (
     <Link
       href={`/chat?q=${encodeURIComponent(question)}`}
-      className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left text-sm text-slate-700 shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+      style={{ animationDelay: `${index * 3}s` }}
+      className="question-card-sweep group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left text-sm text-slate-700 shadow-sm transition hover:border-emerald-300 hover:shadow-md"
     >
       <span>{question}</span>
       <svg

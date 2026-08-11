@@ -4,19 +4,19 @@ import { test, expect } from "@playwright/test";
 // URL is intentionally dead - see playwright.config.ts. Tests 1-2 don't
 // depend on backend connectivity, so they exercise that same server safely.
 
-const EXAM_QUESTIONS = [
+const ANALYST_QUESTIONS = [
   "Which airports in New England are strong candidates for terminal expansion?",
   "Compare congestion at LAX and SNA.",
   "What percentage of flights out of Anchorage are long-haul?",
   "What is the estimated unmet flight demand at SFO, and why?",
 ];
 
-test("landing renders title, all 4 exam-question cards, and Start asking", async ({ page }) => {
+test("landing renders title, all 4 question cards, and Start asking", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/Airport Investment Intelligence Agent/);
   await expect(page.getByRole("heading", { name: "Airport Investment Intelligence Agent" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Start asking" })).toBeVisible();
-  for (const question of EXAM_QUESTIONS) {
+  for (const question of ANALYST_QUESTIONS) {
     await expect(page.getByRole("link", { name: question })).toBeVisible();
   }
 });

@@ -21,7 +21,7 @@ connected".
 
 | Route | What it is |
 |---|---|
-| `/` | Public landing page: value prop, the 4 exam questions as click-to-ask cards, architecture diagram, privacy line |
+| `/` | Public landing page: value prop, the 4 analyst questions as click-to-ask cards, architecture diagram, privacy line |
 | `/chat` | Chat UI: SSE-streamed answers, markdown with GFM tables, per-table Copy/CSV + auto bar chart, assumptions footnote, follow-up chips, thread sidebar, voice input/read-aloud |
 
 ## Notes
@@ -77,7 +77,7 @@ npm run test:e2e   # installs Chromium on first run, then builds+starts+tests
 3 tests (`e2e/smoke.spec.ts`), one production build shared across all of them (backend
 URL intentionally pointed at a dead port - see `playwright.config.ts`):
 
-1. Landing renders the title, all 4 exam-question cards, and Start asking.
+1. Landing renders the title, all 4 question cards, and Start asking.
 2. `/chat` renders the input, send button, and mic button.
 3. Backend unreachable: the amber banner shows the production wording and nothing else
    breaks (input/send button still render, no uncaught page errors).

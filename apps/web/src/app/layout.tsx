@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ClerkProvider, Show, SignInButton, UserButton } from "@clerk/nextjs";
+import { BrandMark } from "@/components/BrandMark";
 import { isClerkEnabled } from "@/lib/clerk-config";
 import "./globals.css";
 
@@ -8,6 +9,15 @@ export const metadata: Metadata = {
   title: "Airport Investment Intelligence Agent",
   description:
     "Ask investment questions about US airport modernization and expansion. Every number traces to public aviation data.",
+  icons: {
+    // SVG first (sizes="any" is the documented trick that gets browsers
+    // supporting vector favicons to prefer it); PNG is the fallback for
+    // Safari and other browsers that only understand raster favicons.
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "64x64" },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const content = (
     <>
       <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:px-8">
-        <Link href="/" className="text-sm font-semibold tracking-tight text-slate-900">
+        <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+          <BrandMark className="h-5 w-5 shrink-0" />
           Airport Investment Intelligence Agent
         </Link>
         <nav className="flex items-center gap-5 text-sm">
