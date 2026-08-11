@@ -1,8 +1,17 @@
 Copyright (c) 2026 Guy Dvorkin. All rights reserved.
 
-This source code is shared for technical evaluation only. No license is granted
-to any party to use, copy, modify, merge, publish, distribute, sublicense, or
-create derivative works from it, in whole or in part, for any purpose.
+Evaluation-only license. This repository is public solely so that the
+author's work can be reviewed as part of a hiring process. Permission is
+granted to view the source and run the software for that evaluation
+purpose only.
 
-The public datasets this project ingests - US DOT/BTS, FAA, and OurAirports -
-remain subject to their own terms and are not covered by this notice.
+No other rights are granted. No person, company, or organization -
+including the organization for which this evaluation was prepared - may
+use, copy, modify, merge, publish, distribute, sublicense, deploy,
+incorporate, or create derivative works from any part of this repository,
+in whole or in part, commercially or internally, without the prior
+written agreement of Guy Dvorkin (dvorkin.guy@gmail.com).
+
+The public datasets this project ingests - US DOT/BTS, FAA, and
+OurAirports - remain subject to their own terms and are not covered by
+this notice.
