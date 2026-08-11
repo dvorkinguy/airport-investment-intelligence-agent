@@ -57,9 +57,9 @@ function EmptyAnswerCard() {
 function TypingDots() {
   return (
     <div className="flex gap-1 py-1">
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-300 [animation-delay:-0.3s]" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-300 [animation-delay:-0.15s]" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-300" />
     </div>
   );
 }

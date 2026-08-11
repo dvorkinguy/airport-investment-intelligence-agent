@@ -39,9 +39,17 @@ export function TableBlock({ node, children }: { node?: unknown; children?: Reac
   const showChart = metricCol !== -1 && rows.length > 0 && rows.length <= MAX_CHART_ROWS;
   const chartData = showChart
     ? rows.map((row) => {
-        const identifier = row[labelCol] ?? "";
         const year = yearCol !== -1 ? row[yearCol] : undefined;
-        return { name: year ? `${identifier} ${year}` : identifier, value: parseNumericCell(row[metricCol] ?? "0") };
+        let name: string;
+        if (labelCol !== -1) {
+          const identifier = row[labelCol] ?? "";
+          name = year ? `${identifier} ${year}` : identifier;
+        } else {
+          // No text identifier column (e.g. a bare Year + metric table) -
+          // label by year alone rather than inventing a fake identifier.
+          name = year ?? "";
+        }
+        return { name, value: parseNumericCell(row[metricCol] ?? "0") };
       })
     : [];
 

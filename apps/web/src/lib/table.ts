@@ -78,7 +78,7 @@ function isRankLikeColumn(header: string, values: string[]): boolean {
 export interface ChartColumns {
   /** Bar height. -1 if no eligible metric column exists. */
   metricCol: number;
-  /** Bar identifier (first non-metric, non-year, non-rank column). */
+  /** Bar identifier (first non-metric, non-year, non-rank column). -1 if every column is numeric - i.e. no text identifier column exists. */
   labelCol: number;
   /** Present when a year/date column exists, so labels can disambiguate a repeated identifier - "LAX 2025". -1 otherwise. */
   yearCol: number;
@@ -121,7 +121,7 @@ export function findChartColumns(headers: string[], rows: string[][]): ChartColu
   const excluded = new Set([metricCol, yearCol, rankCol]);
   const labelCol = headers.findIndex((_, col) => !excluded.has(col));
 
-  return { metricCol, labelCol: labelCol === -1 ? 0 : labelCol, yearCol };
+  return { metricCol, labelCol, yearCol };
 }
 
 function escapeCsv(value: string): string {
