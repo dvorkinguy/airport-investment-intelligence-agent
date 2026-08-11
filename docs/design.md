@@ -236,7 +236,11 @@ Analysts live in Excel, BI dashboards, and IC memos. The tool meets them there:
 - Click-to-ask examples on the landing page reproduce this document's four
   questions in one click.
 - Production path: scheduled morning briefs, Slack/Teams bot, SSO - designed, in
-  the queue described in Section 11.
+  the queue described in Section 11. The delivery mechanism is already sitting in
+  the data: the `queries` log stores user, question, answer, tools used and
+  latency per row, so a server-rendered email digest or a Slack/Teams push is a
+  scheduled read over that table through a transactional provider (Resend, SES)
+  rather than new agent work - designed, not built.
 
 ## 9. Responsible AI
 
@@ -289,9 +293,16 @@ a client standardizes on GCP.
 
 Designed and deliberately not built inside the window, listed so the line between
 what runs and what is planned stays visible: a supervisor plus specialist agent
-split (analyst SQL / live-ops FAA and weather), a voice interface, an `/explore`
-league-table page with CSV export, an analyst dashboard (Looker Studio on the
-same views), product analytics (PostHog), and scheduled data refresh.
+split (analyst SQL / live-ops FAA and weather), an `/explore` league-table page
+with CSV export, an analyst dashboard (Looker Studio on the same views), product
+analytics (PostHog), and scheduled data refresh.
+
+Voice is a partial exception worth stating precisely: dictation into the composer
+and read-aloud on any answer ship today, both on the browser's Web Speech API, so
+the interface is hands-free but still turn-based text underneath. Full
+conversational voice-to-voice is the designed step, and it arrives as a managed
+real-time layer - ElevenLabs Agents, OpenAI Realtime, or Gemini Live - speaking
+to the same `/chat` backend, leaving the agent, its tools, and auth unchanged.
 
 These come in the order an investment committee would pay for them, not in the
 order they are fun to build - which is why the financial and demographic layers
