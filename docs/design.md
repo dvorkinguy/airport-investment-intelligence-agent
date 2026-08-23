@@ -294,8 +294,17 @@ a client standardizes on GCP.
 Designed and deliberately not built inside the window, listed so the line between
 what runs and what is planned stays visible: a supervisor plus specialist agent
 split (analyst SQL / live-ops FAA and weather), an `/explore` league-table page
-with CSV export, an analyst dashboard (Looker Studio on the same views), product
-analytics (PostHog), and scheduled data refresh.
+with CSV export, an analyst dashboard (Looker Studio on the same views), and
+product analytics (PostHog).
+
+**Scheduled data refresh was on this list and has since been built** - a weekly
+Cloud Run Job that probes the public sources, rebuilds only when something new has
+published, validates before it loads, and records every run to a table. The last
+successful check is public at `/freshness`. This shipped 2026-08-23, after
+submission: the `submission-2026-08-11` tag does not contain it. Reasoning in
+[adr/ADR-005-scheduled-ingestion.md](adr/ADR-005-scheduled-ingestion.md). The
+8-gate table in Section 7 is unchanged, because none of those eight gates concerns
+data ingestion.
 
 Voice is a partial exception worth stating precisely: dictation into the composer
 and read-aloud on any answer ship today, both on the browser's Web Speech API, so
