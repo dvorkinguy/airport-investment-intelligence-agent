@@ -3,6 +3,7 @@ import { QuestionCard } from "@/components/landing/QuestionCard";
 import { ArchitectureDiagram } from "@/components/landing/ArchitectureDiagram";
 import { AnswerPreviewCard } from "@/components/landing/AnswerPreviewCard";
 import { TechStrip } from "@/components/landing/TechStrip";
+import { FreshnessLine } from "@/components/landing/FreshnessLine";
 
 const ANALYST_QUESTIONS = [
   "Which airports in New England are strong candidates for terminal expansion?",
@@ -63,6 +64,7 @@ export default function LandingPage() {
         <div className="mt-4 md:mt-6">
           <ArchitectureDiagram />
         </div>
+        <FreshnessLine />
       </section>
 
       <section className="mt-14 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-center text-xs text-slate-500">

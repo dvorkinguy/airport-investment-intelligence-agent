@@ -12,6 +12,7 @@ surfaced verbatim to the agent, which then says so instead of inventing numbers.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -122,6 +123,35 @@ ORDER BY year DESC
 LIMIT %(years)s
 """
 
+# --- ADR-005: scheduled ingestion. ``data_refresh_runs`` is owned by the
+# ingestion workstream and may not exist yet - see refresh_status() below,
+# which treats that the same as "no runs recorded".
+
+Q_LAST_SUCCESSFUL_REFRESH = """
+SELECT finished_at, latest_period, sources
+FROM data_refresh_runs
+WHERE status IN ('success', 'no_change')
+ORDER BY finished_at DESC
+LIMIT 1
+"""
+
+#: A Cloud Run Job execution that dies hard (OOM, node eviction) can leave its
+#: row permanently 'running'. Past this many seconds a 'running' row is dead,
+#: not current, and must not be reported as the last run or anchor a
+#: next-scheduled estimate.
+STALE_RUNNING_SECONDS = 3600
+
+# Deliberately unfiltered by status otherwise: a 'failed' row here still tells
+# us the schedule fired and is reported as-is by refresh_status() rather than
+# hidden behind an older good run - see base.AirportRepo.refresh_status.
+Q_LAST_REFRESH_RUN = """
+SELECT started_at, status
+FROM data_refresh_runs
+WHERE status <> 'running' OR started_at > now() - %(stale_after)s
+ORDER BY started_at DESC
+LIMIT 1
+"""
+
 
 def coerce_numeric(value: Any) -> Any:
     """Postgres NUMERIC arrives as ``Decimal``, which JSON-encodes as a string.
@@ -135,6 +165,19 @@ def coerce_numeric(value: Any) -> Any:
         as_float = float(value)
         return int(as_float) if as_float.is_integer() else as_float
     return value
+
+
+def coerce_sources(value: Any) -> list[str] | None:
+    """``sources`` is jsonb written by the ingestion workstream; its exact shape
+    (a bare list of names, or a dict keyed by source) isn't this repository's
+    contract to fix. Accept either rather than guess wrong - anything else
+    degrades to ``None``, same as a missing table, instead of surfacing it.
+    """
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    if isinstance(value, dict):
+        return list(value.keys())
+    return None
 
 
 class PostgresRepo:
@@ -287,6 +330,40 @@ class PostgresRepo:
     async def ping(self) -> bool:
         await self._select("SELECT 1 AS ok", {})
         return True
+
+    # --- ADR-005: scheduled ingestion --------------------------------------
+
+    async def refresh_status(self) -> dict[str, Any]:
+        """See ``AirportRepo.refresh_status``.
+
+        Two independent queries on purpose: the honesty rule is that a failed
+        (or stale-running) row must never advance ``last_successful_at``, so
+        that value is sourced only from rows filtered to 'success'/'no_change'
+        - a query that literally cannot see a failed row exists. Whatever the
+        newest run actually did - including fail - comes from the second,
+        separately, and is reported as-is.
+        """
+        try:
+            successful = await self._select(Q_LAST_SUCCESSFUL_REFRESH, {})
+            latest = await self._select(
+                Q_LAST_REFRESH_RUN,
+                {"stale_after": timedelta(seconds=STALE_RUNNING_SECONDS)},
+            )
+        except Exception:
+            # Covers RepoError (missing table, timeout, ...) and anything the
+            # pool itself can raise (e.g. exhausted). /freshness must never 500.
+            log.warning("data_refresh_runs unavailable", exc_info=True)
+            return {}
+
+        good = successful[0] if successful else {}
+        last = latest[0] if latest else {}
+        return {
+            "last_successful_at": good.get("finished_at"),
+            "latest_period": good.get("latest_period"),
+            "sources": coerce_sources(good.get("sources")),
+            "last_run_status": last.get("status"),
+            "last_run_started_at": last.get("started_at"),
+        }
 
     def stats(self) -> dict[str, Any]:
         return pool_stats(self._pool)

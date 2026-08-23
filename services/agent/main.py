@@ -1,7 +1,8 @@
 """FastAPI service.
 
-    GET  /health   liveness + which backend, model and data vintage are live
-    POST /chat     ask a question on a thread; streamed (SSE) or single JSON
+    GET  /health      liveness + which backend, model and data vintage are live
+    GET  /freshness   public: is the scheduled refresh (ADR-005) current
+    POST /chat        ask a question on a thread; streamed (SSE) or single JSON
 
 Conversation memory is the LangGraph checkpointer keyed by ``thread_id``, so a
 follow-up question is just another POST with the same thread id.
@@ -15,6 +16,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Request
@@ -205,6 +207,56 @@ def get_runtime(request: Request) -> Runtime:
 
 # --- Routes --------------------------------------------------------------
 
+#: ADR-005's declared cadence. Cloud Scheduler's actual cron expression is
+#: infra config this service cannot poll, so "next scheduled" is estimated
+#: from the last recorded run rather than asserted as a live schedule fact -
+#: and only once a run has actually happened (see _freshness_body).
+REFRESH_CADENCE = "weekly"
+REFRESH_INTERVAL = timedelta(days=7)
+
+
+def _iso(dt: datetime | None) -> str | None:
+    """UTC, second precision, ``Z`` suffix - matches every other timestamp this
+    service already emits. Never raises: a naive value (should not happen for
+    a TIMESTAMPTZ column, but this endpoint must never 500 either way) is
+    treated as UTC rather than rejected."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+async def _freshness_body(rt: Runtime) -> dict[str, Any]:
+    """ADR-005: is the scheduled refresh current, reported honestly.
+
+    ``last_successful_refresh`` only ever moves for a 'success' or 'no_change'
+    run - see ``AirportRepo.refresh_status``. ``last_run_status`` reports the
+    newest run as-is, including 'failed': a failed attempt is surfaced next to
+    the older-but-good timestamp rather than hidden behind it, because a
+    silently stale-but-confident endpoint is the exact defect ADR-005 exists
+    to fix. Everything is null and ``last_run_status`` is "unknown" until the
+    ledger has produced at least one usable row - a normal pre-launch state,
+    never an error.
+    """
+    try:
+        status = await rt.repo.refresh_status()
+    except Exception as exc:
+        log.warning("refresh status unavailable", extra={"error": str(exc)})
+        status = {}
+
+    last_run_started_at = status.get("last_run_started_at")
+    return {
+        "last_successful_refresh": _iso(status.get("last_successful_at")),
+        "last_run_status": status.get("last_run_status") or "unknown",
+        "cadence": REFRESH_CADENCE if last_run_started_at else None,
+        "next_scheduled": (
+            _iso(last_run_started_at + REFRESH_INTERVAL) if last_run_started_at else None
+        ),
+        "latest_period": status.get("latest_period"),
+        "sources": status.get("sources"),
+    }
+
 
 @app.get("/health")
 async def health(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
@@ -223,6 +275,8 @@ async def health(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
         "model": rt.settings.agent_model,
         "llm_configured": bool(rt.settings.openrouter_key),
         "data_vintage": rt.vintage,
+        # ADR-005, additive: data_vintage above is unchanged and already public.
+        "last_refresh": await _freshness_body(rt),
         "tracing": rt.tracing.enabled,
         "tracing_environment": rt.tracing.environment if rt.tracing.enabled else None,
         "query_log": rt.queries_ready,
@@ -242,12 +296,26 @@ async def health(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
     return JSONResponse(body, status_code=200 if db_ok else 503)
 
 
+@app.get("/freshness")
+async def freshness(rt: Runtime = Depends(get_runtime)) -> JSONResponse:
+    """Public, unauthenticated (ADR-005): whether the scheduled refresh is
+    current, verifiable by anyone without asking. Always 200 - degrades to
+    nulls, never errors, so a missing ledger or an unreachable database can
+    never take this endpoint down."""
+    return JSONResponse(await _freshness_body(rt), status_code=200)
+
+
 @app.get("/")
 async def root(rt: Runtime = Depends(get_runtime)) -> dict[str, Any]:
     return {
         "service": rt.settings.app_name,
         "version": __version__,
-        "endpoints": {"health": "GET /health", "chat": "POST /chat", "docs": "GET /docs"},
+        "endpoints": {
+            "health": "GET /health",
+            "freshness": "GET /freshness",
+            "chat": "POST /chat",
+            "docs": "GET /docs",
+        },
     }
 
 

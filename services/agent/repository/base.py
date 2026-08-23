@@ -145,6 +145,36 @@ class AirportRepo(Protocol):
         """Cheap liveness probe used by /health."""
         ...
 
+    async def refresh_status(self) -> dict[str, Any]:
+        """Scheduled-ingestion state (ADR-005), read from ``data_refresh_runs``.
+
+        Returns ``{}`` when the table does not exist, is empty, or the query
+        fails - all three are ordinary pre-launch states (this workstream can
+        land before or after ADR-005 ships), never raised as an error. When
+        non-empty, keys are:
+
+            last_successful_at   datetime | None  ``finished_at`` of the
+                                  newest run whose status is 'success' or
+                                  'no_change'. A 'failed' run must never
+                                  advance this - that is the whole honesty
+                                  of the endpoint this feeds.
+            latest_period         str | None       from that same run.
+            sources                list[str] | None from that same run.
+            last_run_status       str | None       status of the newest run
+                                  of ANY status ('success' | 'no_change' |
+                                  'failed' | 'running') - surfaced as-is, so
+                                  a failed attempt is reported honestly
+                                  rather than hidden behind an old good
+                                  timestamp. A 'running' row older than the
+                                  job's task timeout is stale and is treated
+                                  as if it does not exist.
+            last_run_started_at  datetime | None  ``started_at`` of that
+                                  same newest-run row - used only to anchor
+                                  a next-scheduled estimate, never to
+                                  advance ``last_successful_at``.
+        """
+        ...
+
 
 def normalize_iata(value: str) -> str:
     return (value or "").strip().upper()

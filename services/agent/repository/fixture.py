@@ -174,3 +174,11 @@ class FixtureRepo:
 
     async def ping(self) -> bool:
         return bool(self._airports)
+
+    async def refresh_status(self) -> dict[str, Any]:
+        """ADR-005's ``data_refresh_runs`` ledger is a Postgres table; the
+        fixture backend has no scheduled ingestion to report on, so it always
+        answers "unknown" - the same state ``PostgresRepo`` returns when that
+        table does not exist yet.
+        """
+        return {}

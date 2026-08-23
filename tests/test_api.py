@@ -160,3 +160,97 @@ def test_a_real_answer_is_left_alone(client: TestClient) -> None:
     ).json()
     assert body["answer"] != EMPTY_ANSWER_FALLBACK
     assert "Boston Logan" in body["answer"]
+
+
+# --- /freshness (ADR-005) --------------------------------------------------
+
+
+def test_freshness_is_unknown_and_public_with_no_database(client: TestClient) -> None:
+    """The client fixture runs on FixtureRepo - no data_refresh_runs table
+    exists, and no auth header is sent, matching the other anonymous tests."""
+    resp = client.get("/freshness")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "last_successful_refresh": None,
+        "last_run_status": "unknown",
+        "cadence": None,
+        "next_scheduled": None,
+        "latest_period": None,
+        "sources": None,
+    }
+
+
+def test_freshness_reports_a_known_good_refresh(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timezone
+
+    finished = datetime(2026, 8, 23, 21, 14, 2, tzinfo=timezone.utc)
+    started = datetime(2026, 8, 23, 21, 10, 0, tzinfo=timezone.utc)
+
+    async def fake_refresh_status() -> dict:
+        return {
+            "last_successful_at": finished,
+            "latest_period": "2026-02",
+            "sources": ["BTS T-100 Segment", "OurAirports"],
+            "last_run_status": "no_change",
+            "last_run_started_at": started,
+        }
+
+    monkeypatch.setattr(client.app.state.rt.repo, "refresh_status", fake_refresh_status)
+    body = client.get("/freshness").json()
+
+    assert body["last_successful_refresh"] == "2026-08-23T21:14:02Z"
+    assert body["last_run_status"] == "no_change"
+    assert body["cadence"] == "weekly"
+    assert body["next_scheduled"] == "2026-08-30T21:10:00Z"
+    assert body["latest_period"] == "2026-02"
+    assert body["sources"] == ["BTS T-100 Segment", "OurAirports"]
+
+
+def test_freshness_never_advances_on_a_failed_run(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole point of ADR-005: a failed attempt is reported honestly, but
+    it must never make an older-but-good refresh look more current than it is."""
+    from datetime import datetime, timezone
+
+    old_success = datetime(2026, 8, 9, 3, 5, 0, tzinfo=timezone.utc)
+    failed_attempt = datetime(2026, 8, 23, 3, 0, 0, tzinfo=timezone.utc)
+
+    async def fake_refresh_status() -> dict:
+        return {
+            "last_successful_at": old_success,
+            "latest_period": "2026-01",
+            "sources": ["BTS T-100 Segment"],
+            "last_run_status": "failed",
+            "last_run_started_at": failed_attempt,
+        }
+
+    monkeypatch.setattr(client.app.state.rt.repo, "refresh_status", fake_refresh_status)
+    body = client.get("/freshness").json()
+
+    assert body["last_successful_refresh"] == "2026-08-09T03:05:00Z"
+    assert body["last_run_status"] == "failed"
+    # the schedule keeps firing even though the latest attempt failed
+    assert body["next_scheduled"] == "2026-08-30T03:00:00Z"
+
+
+def test_freshness_never_fails_when_the_repository_raises(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken() -> dict:
+        raise RuntimeError("pool exhausted")
+
+    monkeypatch.setattr(client.app.state.rt.repo, "refresh_status", broken)
+    resp = client.get("/freshness")
+    assert resp.status_code == 200
+    assert resp.json()["last_run_status"] == "unknown"
+
+
+def test_health_gains_last_refresh_without_touching_data_vintage(client: TestClient) -> None:
+    """Additive only - data_vintage is already public and must not move."""
+    vintage_before = client.get("/health").json()["data_vintage"]
+    body = client.get("/health").json()
+    assert body["data_vintage"] == vintage_before
+    assert body["last_refresh"]["last_run_status"] == "unknown"

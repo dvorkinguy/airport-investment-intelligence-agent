@@ -24,6 +24,28 @@ export async function checkHealth(signal?: AbortSignal): Promise<HealthStatus> {
   }
 }
 
+// Mirrors GET /freshness in services/agent/main.py (ADR-005).
+export interface FreshnessStatus {
+  last_successful_refresh: string | null;
+  last_run_status: string;
+  cadence: string | null;
+  next_scheduled: string | null;
+  latest_period: string | null;
+  sources: string[] | null;
+}
+
+/** Null on any failure - never partial data, never a thrown error the caller
+ * has to handle. The landing page must render nothing rather than guess. */
+export async function checkFreshness(signal?: AbortSignal): Promise<FreshnessStatus | null> {
+  try {
+    const res = await fetch(`${getApiUrl()}/freshness`, { signal, cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as FreshnessStatus;
+  } catch {
+    return null;
+  }
+}
+
 export interface StreamChatOptions {
   signal?: AbortSignal;
   /** Clerk session JWT (Clerk enabled + signed in). Sent as `Authorization: Bearer <token>`; the backend verifies it via JWKS. Absent when signed out or Clerk is disabled - no auth header is sent, matching the authless mode. */
