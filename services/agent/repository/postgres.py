@@ -168,15 +168,23 @@ def coerce_numeric(value: Any) -> Any:
 
 
 def coerce_sources(value: Any) -> list[str] | None:
-    """``sources`` is jsonb written by the ingestion workstream; its exact shape
-    (a bare list of names, or a dict keyed by source) isn't this repository's
-    contract to fix. Accept either rather than guess wrong - anything else
-    degrades to ``None``, same as a missing table, instead of surfacing it.
+    """``sources`` is jsonb written by the ingestion workstream.
+
+    A ``display`` key, when present, is the friendly names meant for this
+    public endpoint (``ingestion/refresh.py``'s ``SOURCE_DISPLAY``) and wins.
+    Older rows written before that key existed have none - falling back to
+    the internal table-name keys rather than breaking is what keeps a run
+    from before this field shipped readable instead of null. A bare list is
+    accepted as-is; anything else degrades to ``None``, same as a missing
+    table, instead of surfacing something wrong.
     """
+    if isinstance(value, dict):
+        display = value.get("display")
+        if isinstance(display, list):
+            return [str(v) for v in display]
+        return [k for k in value.keys() if k != "display"] or None
     if isinstance(value, list):
         return [str(v) for v in value]
-    if isinstance(value, dict):
-        return list(value.keys())
     return None
 
 

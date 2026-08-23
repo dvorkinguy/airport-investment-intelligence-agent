@@ -126,12 +126,30 @@ async def test_fixture_repo_has_no_refresh_ledger(repo: FixtureRepo) -> None:
     assert await repo.refresh_status() == {}
 
 
-def test_coerce_sources_accepts_a_list_or_a_dict_and_rejects_the_rest() -> None:
+def test_coerce_sources_prefers_the_display_key_when_present() -> None:
+    """ingestion/refresh.py's SOURCE_DISPLAY shape - a real run row."""
+    assert coerce_sources(
+        {
+            "display": ["BTS T-100 Segment", "BTS On-Time Performance"],
+            "bts_t100": {"missing_years": []},
+            "bts_ontime": {"missing_years": []},
+        }
+    ) == ["BTS T-100 Segment", "BTS On-Time Performance"]
+
+
+def test_coerce_sources_falls_back_to_table_keys_for_older_rows_without_display() -> None:
+    """A row written before the display key shipped must still read, not null."""
+    assert coerce_sources({"airports": {"changed": False}, "bts_t100": {"changed": True}}) == [
+        "airports",
+        "bts_t100",
+    ]
+
+
+def test_coerce_sources_accepts_a_bare_list_and_rejects_the_rest() -> None:
     assert coerce_sources(["BTS T-100 Segment", "OurAirports"]) == [
         "BTS T-100 Segment",
         "OurAirports",
     ]
-    assert coerce_sources({"BTS T-100 Segment": {"rows": 1}}) == ["BTS T-100 Segment"]
     assert coerce_sources(None) is None
     assert coerce_sources("BTS T-100 Segment") is None
 
