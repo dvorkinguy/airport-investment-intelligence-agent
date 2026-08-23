@@ -25,7 +25,7 @@ This ADR closes it.
 ## Decision
 
 **A Cloud Run Job (`airport-ingest`), triggered weekly by Cloud Scheduler, running the
-existing ingestion scripts through a new `ingestion/refresh.py` orchestrator, writing every
+ingestion scripts through a new `ingestion/refresh.py` orchestrator, writing every
 run to a `data_refresh_runs` table in Neon, and surfacing the last successful run on a
 public `GET /freshness` endpoint and on the landing page.**
 
@@ -90,6 +90,24 @@ rebuild identical tables would be motion, not freshness.
 
 A `no_change` result is a successful refresh check and is displayed as such. Only a `failed`
 run is a failure.
+
+### The window has to move, or the schedule is theatre
+
+The builders carried a hardcoded year window - `YEARS = (2023, 2024, 2025)` in the two BTS
+scripts, `(2023, 2024)` in the FAA one. Correct for a one-shot build in August 2026; fatal
+on a schedule. Left alone, the job would run every week indefinitely, rebuild the identical
+window each time, and report success, while the data never advanced. A scheduler that reports
+healthy and changes nothing is worse than no scheduler, because it converts a known gap into
+a false claim.
+
+So the window is computed from the calendar and the known publication lag, not written down:
+BTS runs from 2023 to the year three months behind today; FAA Form 127 from 2023 to two years
+behind, since ADR-004 recorded FY2024 filings still arriving in February 2026. The builders
+take the window from the environment and keep their original tuples as defaults, so running
+them by hand is unchanged.
+
+A test freezes the clock in a future year and asserts the window advanced. The failure this
+guards against is silent by construction, so it needs a test rather than an intention.
 
 ## Safety: validate before load, because load destroys
 
