@@ -41,6 +41,15 @@ class FakeRecorder:
         self.rows: dict[int, dict] = {}
         self._next_id = 1
 
+    def coverage(self) -> dict:
+        """Which years Neon holds. run() passes this to probe_sources so the
+        decision is driven by the database rather than by local disk cache."""
+        return {
+            "bts_t100_years": [2023, 2024, 2025],
+            "bts_ontime_years": [2023, 2024, 2025],
+            "airport_financials_years": [2023, 2024],
+        }
+
     def table_counts(self) -> dict:
         return dict(self._table_counts)
 
@@ -62,7 +71,7 @@ def test_all_sources_unchanged_skips_load(monkeypatch: pytest.MonkeyPatch) -> No
     recorder = FakeRecorder(ROWS_BEFORE)
     build_calls: list[int] = []
     load_calls: list[int] = []
-    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before: UNCHANGED_SOURCES)
+    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before, coverage=None: UNCHANGED_SOURCES)
     monkeypatch.setattr(refresh, "run_builders", lambda: build_calls.append(1))
     monkeypatch.setattr(refresh, "run_load", lambda: load_calls.append(1))
 
@@ -78,7 +87,7 @@ def test_all_sources_unchanged_skips_load(monkeypatch: pytest.MonkeyPatch) -> No
 def test_a_builder_raising_blocks_load(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = FakeRecorder(ROWS_BEFORE)
     load_calls: list[int] = []
-    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before: CHANGED_SOURCES)
+    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before, coverage=None: CHANGED_SOURCES)
 
     def boom() -> None:
         raise refresh.BuildFailed("build_bts_t100: form response was not a zip")
@@ -97,7 +106,7 @@ def test_a_builder_raising_blocks_load(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_csv_below_the_row_count_floor_blocks_load(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = FakeRecorder(ROWS_BEFORE)
     load_calls: list[int] = []
-    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before: CHANGED_SOURCES)
+    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before, coverage=None: CHANGED_SOURCES)
     monkeypatch.setattr(refresh, "run_builders", lambda: None)
     monkeypatch.setattr(refresh, "run_load", lambda: load_calls.append(1))
 
@@ -121,7 +130,7 @@ def test_happy_path_loads_once_and_records_after_counts(monkeypatch: pytest.Monk
     recorder = FakeRecorder(ROWS_BEFORE)
     build_calls: list[int] = []
     load_calls: list[int] = []
-    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before: CHANGED_SOURCES)
+    monkeypatch.setattr(refresh, "probe_sources", lambda rows_before, coverage=None: CHANGED_SOURCES)
     monkeypatch.setattr(refresh, "run_builders", lambda: build_calls.append(1))
     monkeypatch.setattr(refresh, "run_load", lambda: load_calls.append(1))
     monkeypatch.setattr(refresh, "count_csv_rows", lambda path: ROWS_BEFORE[
@@ -142,7 +151,7 @@ def test_happy_path_loads_once_and_records_after_counts(monkeypatch: pytest.Monk
 def test_an_unhandled_exception_still_closes_the_row(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = FakeRecorder(ROWS_BEFORE)
 
-    def boom(rows_before: dict) -> dict:
+    def boom(rows_before: dict, coverage: dict | None = None) -> dict:
         raise RuntimeError("neon connection dropped mid-probe")
 
     monkeypatch.setattr(refresh, "probe_sources", boom)

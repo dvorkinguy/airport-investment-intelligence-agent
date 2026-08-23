@@ -41,6 +41,7 @@ Usage: uv run --with requests python ingestion/build_bts_t100.py
 is owned by the parallel agent-backend worker on this repo.)
 """
 
+import os
 import csv
 import io
 import re
@@ -76,7 +77,13 @@ DATA_FIELDS = [
     "DEPARTURES_SCHEDULED", "DEPARTURES_PERFORMED", "PAYLOAD", "SEATS", "PASSENGERS",
     "FREIGHT", "MAIL", "DISTANCE", "RAMP_TO_RAMP", "AIR_TIME",
 ]
-YEARS = (2023, 2024, 2025)
+# Year window. The default preserves the original hand-run behaviour exactly;
+# ingestion/refresh.py overrides it via INGEST_YEARS so a SCHEDULED run advances
+# instead of rebuilding the same window forever. See ADR-005 - a scheduler that
+# reports healthy and never moves the data is worse than no scheduler.
+YEARS = tuple(
+    int(y) for y in os.environ.get("INGEST_YEARS", "2023,2024,2025").split(",") if y.strip()
+)
 
 
 def zip_path(year: int) -> Path:

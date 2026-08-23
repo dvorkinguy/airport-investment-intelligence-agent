@@ -36,6 +36,7 @@ case, not a zero).
 Usage: uv run python ingestion/build_faa_form127.py
 """
 
+import os
 import csv
 import io
 from pathlib import Path
@@ -49,7 +50,13 @@ URL_TEMPLATE = (
     "https://cats.airports.faa.gov/reports/form_127/"
     "?year={year}&yearToCompare=&region=&state=&loc_id=&airportID=&exportToCSV=true"
 )
-YEARS = (2023, 2024)
+# Year window. The default preserves the original hand-run behaviour exactly;
+# ingestion/refresh.py overrides it via INGEST_YEARS so a SCHEDULED run advances
+# instead of rebuilding the same window forever. See ADR-005 - a scheduler that
+# reports healthy and never moves the data is worse than no scheduler.
+YEARS = tuple(
+    int(y) for y in os.environ.get("INGEST_FAA_YEARS", "2023,2024").split(",") if y.strip()
+)
 
 COL_YEAR = 0
 COL_LOCID = 4

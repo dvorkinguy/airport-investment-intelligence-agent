@@ -6,6 +6,7 @@ Reads DATABASE_URL from .env at repo root (never printed, never logged).
 Usage: uv run python ingestion/load_t25.py
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -17,9 +18,18 @@ DATA_DIR = REPO_ROOT / "data"
 
 
 def load_env():
+    """DATABASE_URL from .env at repo root, or from the environment.
+
+    The environment branch is what makes an unattended container run possible:
+    Cloud Run supplies the secret as an env var and has no .env file, so the
+    original .env-only version exited on startup. Never printed, never logged.
+    """
     env = {}
     env_path = REPO_ROOT / ".env"
     if not env_path.exists():
+        from_environ = os.environ.get("DATABASE_URL")
+        if from_environ:
+            return {"DATABASE_URL": from_environ}
         sys.exit(f"Missing {env_path}")
     with open(env_path, encoding="utf-8") as f:
         for line in f:
@@ -28,6 +38,8 @@ def load_env():
                 continue
             key, _, value = line.partition("=")
             env[key.strip()] = value.strip()
+    if "DATABASE_URL" not in env and os.environ.get("DATABASE_URL"):
+        env["DATABASE_URL"] = os.environ["DATABASE_URL"]
     if "DATABASE_URL" not in env:
         sys.exit("DATABASE_URL not set in .env")
     return env

@@ -26,6 +26,7 @@ per-file retries, then a slower-concurrency second pass for anything still faili
 Usage: uv run ingestion/build_bts_ontime.py
 """
 
+import os
 import csv
 import io
 import time
@@ -47,7 +48,13 @@ URL_TEMPLATE = (
 CSV_NAME_TEMPLATE = (
     "On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_{year}_{month}.csv"
 )
-YEARS = (2023, 2024, 2025)
+# Year window. The default preserves the original hand-run behaviour exactly;
+# ingestion/refresh.py overrides it via INGEST_YEARS so a SCHEDULED run advances
+# instead of rebuilding the same window forever. See ADR-005 - a scheduler that
+# reports healthy and never moves the data is worse than no scheduler.
+YEARS = tuple(
+    int(y) for y in os.environ.get("INGEST_YEARS", "2023,2024,2025").split(",") if y.strip()
+)
 MONTHS = range(1, 13)
 TARGETS = [(y, m) for y in YEARS for m in MONTHS]
 

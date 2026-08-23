@@ -22,6 +22,11 @@ dependencies = [
     # pyjwt[crypto] verifies Clerk's RS256 session tokens against its JWKS.
     "httpx>=0.27",
     "pyjwt[crypto]>=2.10",
+    # Imported directly by ingestion/build_bts_t100.py. It was reaching the
+    # environment only transitively via langfuse; declared explicitly so a
+    # scheduled 03:00 run cannot break because an unrelated dependency
+    # dropped it.
+    "requests>=2.32",
 ]
 
 [project.optional-dependencies]

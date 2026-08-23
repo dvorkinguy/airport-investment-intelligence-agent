@@ -20,8 +20,12 @@ Usage: uv run python -m ingestion.refresh --trigger manual
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import traceback
+import urllib.error
+import urllib.request
+from datetime import date
 from pathlib import Path
 
 import psycopg
@@ -61,6 +65,114 @@ def count_csv_rows(path: Path) -> int:
 
 
 # ---------------------------------------------------------------------------
+# The moving year window (ADR-005 "The window has to move, or the schedule is
+# theatre").
+#
+# The builders used to carry a hardcoded YEARS tuple. On a schedule that is
+# fatal: the job would rebuild the identical window every week forever and
+# report success while the data never advanced. The window is therefore
+# computed from the calendar and the published reporting lag, and handed to the
+# builders through the environment.
+#
+# COMPLETE CALENDAR YEARS ONLY. The scoring aggregates by airport-year -
+# v_carrier_concentration is HHI per airport-year and v_roi_proxy joins on it -
+# so a partial year would distort every year-over-year comparison in the
+# product. ADR-004 reasoned the same way about FAA FY2025. A year is admitted
+# only once its December has published.
+# ---------------------------------------------------------------------------
+
+# Display names for the public /freshness endpoint. The run row is read by a
+# surface a reviewer can open, so it carries the names of the actual
+# publications rather than our table names.
+SOURCE_DISPLAY = [
+    "BTS T-100 Segment",
+    "BTS On-Time Performance",
+    "FAA Form 127 (CATS)",
+    "OurAirports",
+]
+
+FIRST_BTS_YEAR = 2023
+FIRST_FAA_YEAR = 2023
+BTS_LAG_MONTHS = 3   # docs/design.md:131 - "Reporting lags ~2-3 months"
+FAA_LAG_YEARS = 2    # ADR-004 - FY2024 filings still arriving 2026-02
+
+OURAIRPORTS_FILES = {
+    "airports.csv": "https://davidmegginson.github.io/ourairports-data/airports.csv",
+    "runways.csv": "https://davidmegginson.github.io/ourairports-data/runways.csv",
+}
+
+HTTP_TIMEOUT = 60
+
+
+def _shift_months(d: date, months: int) -> date:
+    total = (d.year * 12 + (d.month - 1)) + months
+    return date(total // 12, total % 12 + 1, 1)
+
+
+def bts_year_window(today: date | None = None) -> tuple[int, ...]:
+    """Complete calendar years of BTS data that should exist by `today`."""
+    today = today or date.today()
+    published_through = _shift_months(today, -BTS_LAG_MONTHS)
+    newest_complete = (
+        published_through.year if published_through.month == 12
+        else published_through.year - 1
+    )
+    return tuple(range(FIRST_BTS_YEAR, newest_complete + 1))
+
+
+def faa_year_window(today: date | None = None) -> tuple[int, ...]:
+    """FAA Form 127 fiscal years plausibly filed by `today`."""
+    today = today or date.today()
+    return tuple(range(FIRST_FAA_YEAR, today.year - FAA_LAG_YEARS + 1))
+
+
+def apply_year_windows(today: date | None = None) -> dict:
+    """Publish the windows to the environment BEFORE any builder is imported.
+
+    The builders read their YEARS at import time, so this must run first -
+    that is why every builder import in this module is deliberately lazy.
+    """
+    bts = bts_year_window(today)
+    faa = faa_year_window(today)
+    os.environ["INGEST_YEARS"] = ",".join(str(y) for y in bts)
+    os.environ["INGEST_FAA_YEARS"] = ",".join(str(y) for y in faa)
+    return {"bts_years": list(bts), "faa_years": list(faa)}
+
+
+def http_status(url: str) -> int | None:
+    """HEAD a URL. None means the request itself failed - which is NOT the
+    same as 404 and must never be read as 'nothing published'."""
+    req = urllib.request.Request(url, method="HEAD")
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:
+        return None
+
+
+def fetch_ourairports(raw_dir: Path) -> dict:
+    """build_airports.py has no fetch step of its own - it transforms whatever
+    is already in data/raw/. On a schedule, in a fresh container, data/raw/ is
+    empty, so nothing would rebuild. This supplies the two source files."""
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    fetched = {}
+    for name, url in OURAIRPORTS_FILES.items():
+        dest = raw_dir / name
+        if dest.exists() and dest.stat().st_size > 500_000:
+            fetched[name] = "cached"
+            continue
+        tmp = dest.with_suffix(dest.suffix + ".part")
+        with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as resp, open(tmp, "wb") as f:
+            while chunk := resp.read(1024 * 1024):
+                f.write(chunk)
+        tmp.replace(dest)
+        fetched[name] = "downloaded"
+    return fetched
+
+
+# ---------------------------------------------------------------------------
 # Probing - see ADR-005 "Cadence: weekly poll, monthly effective refresh".
 #
 # None of the four sources exposes a true live freshness check the way a
@@ -78,7 +190,7 @@ def count_csv_rows(path: Path) -> int:
 # ---------------------------------------------------------------------------
 
 
-def probe_airports(rows_before: dict) -> dict:
+def _local_airports(rows_before: dict) -> dict:
     """build_airports.py has no fetch step - it transforms whatever is
     already in data/raw/{airports,runways}.csv. The only signal available
     here is whether the already-committed data/airports.csv still matches
@@ -95,7 +207,7 @@ def probe_airports(rows_before: dict) -> dict:
     }
 
 
-def probe_bts_t100() -> dict:
+def _local_bts_t100() -> dict:
     """build_bts_t100.py's own docstring: no static prezip URL exists for
     T-100 - it drives a scripted ASP.NET WebForms POST flow, so there is no
     HEAD/Last-Modified check against the live source. The cheap check that
@@ -116,7 +228,7 @@ def probe_bts_t100() -> dict:
     }
 
 
-def probe_bts_ontime() -> dict:
+def _local_bts_ontime() -> dict:
     """build_bts_ontime.py downloads from a predictable static URL per
     (year, month) - the one source shaped for a real HEAD/URL-existence
     probe. Its own hardcoded YEARS/MONTHS already caps the range this
@@ -140,7 +252,7 @@ def probe_bts_ontime() -> dict:
     }
 
 
-def probe_airport_financials() -> dict:
+def _local_airport_financials() -> dict:
     """build_faa_form127.py downloads one bulk CSV per fiscal year in its
     hardcoded YEARS from a ColdFusion export with no static URL to HEAD.
     Same shape as the two BTS sources: a complete local cache for the
@@ -161,19 +273,80 @@ def probe_airport_financials() -> dict:
     }
 
 
-def probe_sources(rows_before: dict) -> dict:
-    return {
-        "airports": probe_airports(rows_before),
-        "bts_t100": probe_bts_t100(),
-        "bts_ontime": probe_bts_ontime(),
-        "airport_financials": probe_airport_financials(),
+def probe_sources(rows_before: dict, coverage: dict | None = None) -> dict:
+    """What matters is whether NEON is missing something, not whether the local
+    disk cache is cold.
+
+    The first implementation compared each builder's configured years against
+    files already downloaded into data/raw/. That is correct on a laptop that
+    keeps its cache and wrong in a container: a fresh Cloud Run task always has
+    an empty data/raw/, so every source would read "changed" and the job would
+    re-download 1.1 GB every single week while claiming to refresh only when
+    something new published.
+
+    So the decision is driven by Neon coverage against the computed window, and
+    confirmed against the live source with a HEAD before committing to a heavy
+    download. The old local checks are kept, renamed, as diagnostics on the run
+    row - they are useful evidence, they are just not the decision.
+    """
+    coverage = coverage or {}
+    windows = {
+        "bts": bts_year_window(),
+        "faa": faa_year_window(),
     }
+
+    bts_have = set(coverage.get("bts_t100_years", []))
+    ontime_have = set(coverage.get("bts_ontime_years", []))
+    faa_have = set(coverage.get("airport_financials_years", []))
+
+    t100_missing = sorted(set(windows["bts"]) - bts_have)
+    ontime_missing = sorted(set(windows["bts"]) - ontime_have)
+    faa_missing = sorted(set(windows["faa"]) - faa_have)
+
+    # Confirm against the live source before committing to a download. BTS
+    # publishes on-time and T-100 on the same monthly cycle, so the one
+    # predictable per-month URL is a sound proxy for both. This is a decision,
+    # not an assumption - T-100 drives a scripted ASP.NET form with no URL to
+    # HEAD, so there is nothing cheaper available for it.
+    upstream = None
+    if t100_missing or ontime_missing:
+        from ingestion import build_bts_ontime as ontime_mod
+
+        year = (ontime_missing or t100_missing)[0]
+        url = ontime_mod.URL_TEMPLATE.format(year=year, month=12)
+        status = http_status(url)
+        upstream = {"probed_url_year": year, "month": 12, "status": status}
+        if status is not None and status >= 400:
+            # The window says the year should exist; the publisher says it does
+            # not. Believe the publisher and do nothing rather than start a
+            # download that cannot succeed.
+            t100_missing, ontime_missing = [], []
+        # status is None means the probe itself failed - that is NOT evidence of
+        # "nothing published", so the missing lists stand and the build proceeds.
+
+    return {
+        "display": SOURCE_DISPLAY,
+        "windows": windows | {"bts": list(windows["bts"]), "faa": list(windows["faa"])},
+        "upstream_check": upstream,
+        "airports": _local_airports(rows_before),
+        "bts_t100": {"missing_years": t100_missing, "changed": bool(t100_missing),
+                     "local": _local_bts_t100()},
+        "bts_ontime": {"missing_years": ontime_missing, "changed": bool(ontime_missing),
+                       "local": _local_bts_ontime()},
+        "airport_financials": {"missing_years": faa_missing, "changed": bool(faa_missing),
+                               "local": _local_airport_financials()},
+    }
+
+
+DECIDING_SOURCES = ("airports", "bts_t100", "bts_ontime", "airport_financials")
 
 
 def any_changed(sources: dict) -> bool:
     # A source this pipeline could not evaluate is not a confirmed "unchanged" -
     # default to True so an unrecognized/no-probe result never masks real drift.
-    return any(source.get("changed", True) for source in sources.values())
+    return any(
+        sources.get(name, {}).get("changed", True) for name in DECIDING_SOURCES
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +357,15 @@ def any_changed(sources: dict) -> bool:
 def run_builders() -> None:
     """Runs the four existing build_*.py scripts in-process, unmodified. Any
     exception, or a non-zero-code SystemExit, is wrapped as BuildFailed."""
+    # build_airports.py has no fetch step of its own, so supply its inputs
+    # before importing anything - in a fresh container data/raw/ is empty.
+    try:
+        fetch_ourairports(DATA_DIR / "raw")
+    except Exception as e:
+        raise BuildFailed(f"ourairports fetch: {e}") from e
+
+    # Imported lazily and ONLY here: the builders read their YEARS at import
+    # time, so apply_year_windows() must have run first.
     from ingestion import build_airports, build_bts_ontime, build_bts_t100, build_faa_form127
 
     for mod in (build_airports, build_bts_t100, build_bts_ontime, build_faa_form127):
@@ -237,6 +419,22 @@ class RunRecorder:
         self._cur.execute(f"SELECT COUNT(*) FROM {table}")
         return self._cur.fetchone()[0]
 
+    def coverage(self) -> dict:
+        """Which years Neon actually holds. This is what the probe compares the
+        computed window against - the local disk cache is not the question."""
+        out = {}
+        for table, column in (
+            ("bts_t100", "year"),
+            ("bts_ontime", "year"),
+            ("airport_financials", "fy"),
+        ):
+            try:
+                self._cur.execute(f"SELECT DISTINCT {column} FROM {table} ORDER BY 1")
+                out[f"{table}_years"] = [r[0] for r in self._cur.fetchall()]
+            except Exception:
+                out[f"{table}_years"] = []
+        return out
+
     def latest_period(self) -> str | None:
         self._cur.execute(
             "SELECT to_char(GREATEST("
@@ -283,10 +481,24 @@ def run(recorder: RunRecorder, trigger: str) -> str:
     run_id = recorder.open_run(trigger)
     try:
         rows_before = recorder.table_counts()
-        sources = probe_sources(rows_before)
+        # Must precede probe_sources: the probes import the builders, and the
+        # builders read their year window from the environment at import time.
+        window = apply_year_windows()
+        sources = probe_sources(rows_before, recorder.coverage())
+        sources["applied_window"] = window
 
         if not any_changed(sources):
-            recorder.close_run(run_id, "no_change", sources=sources, rows_before=rows_before)
+            # latest_period belongs on EVERY terminal path, not just success.
+            # A no_change run is a successful check and the site must still be
+            # able to state the vintage of the data it actually holds; omitting
+            # it here left the public freshness line blank after a correct run.
+            recorder.close_run(
+                run_id,
+                "no_change",
+                sources=sources,
+                rows_before=rows_before,
+                latest_period=recorder.latest_period(),
+            )
             return "no_change"
 
         try:
