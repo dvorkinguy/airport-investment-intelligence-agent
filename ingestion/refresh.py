@@ -328,7 +328,23 @@ def probe_sources(rows_before: dict, coverage: dict | None = None) -> dict:
         "display": SOURCE_DISPLAY,
         "windows": windows | {"bts": list(windows["bts"]), "faa": list(windows["faa"])},
         "upstream_check": upstream,
-        "airports": _local_airports(rows_before),
+        # Airports is reference data and must NOT be able to trigger a rebuild
+        # on its own. The original check compared the local processed CSV
+        # against Neon, which is meaningful on a laptop that keeps data/ and
+        # meaningless in a container, where the ephemeral disk starts empty:
+        # local 0 vs Neon 679 reads as "changed" on every single scheduled
+        # run, forever. That is what made the first real Cloud Run execution
+        # download 1.1 GB it did not need.
+        #
+        # So the only condition that makes airports itself changed is Neon
+        # having none at all - a cold database. Otherwise it rides along with
+        # a BTS-driven rebuild, which regenerates it anyway. The local
+        # comparison is kept as diagnostics on the run row, not as a decision.
+        "airports": {
+            "changed": rows_before.get("airports", 0) == 0,
+            "neon_rows": rows_before.get("airports", 0),
+            "local": _local_airports(rows_before),
+        },
         "bts_t100": {"missing_years": t100_missing, "changed": bool(t100_missing),
                      "local": _local_bts_t100()},
         "bts_ontime": {"missing_years": ontime_missing, "changed": bool(ontime_missing),
@@ -407,66 +423,117 @@ def run_load() -> None:
 
 class RunRecorder:
     """Wraps data_refresh_runs bookkeeping behind counts/open/close so the
-    orchestration in `run()` - and its tests - never need to speak SQL."""
+    orchestration in `run()` - and its tests - never need to speak SQL.
 
-    def __init__(self, cur):
-        self._cur = cur
+    Every method opens its OWN short-lived connection rather than sharing one
+    held for the life of the run. That is not fastidiousness: the first real
+    Cloud Run execution died on
+
+        psycopg.errors.AdminShutdown: terminating connection due to
+        administrator command
+
+    because a single connection was opened, then held across a ten-minute
+    download, and Neon suspended it in the meantime. The failure then
+    cascaded - close_run() needed that same dead connection, so the run row
+    was stranded as `running` forever, which is exactly the state ADR-005
+    says must never exist because it makes /freshness lie.
+
+    The rest of this codebase already knew: services/agent/db.py wraps queries
+    in with_stale_retry and services/agent/checkpointer.py exists solely to
+    survive this. The ingestion path had not learned it yet.
+    """
+
+    def __init__(self, dsn: str):
+        self._dsn = dsn
+
+    def _run(self, fn, *, retries: int = 1):
+        """One short-lived connection per operation, with a single retry on a
+        dropped/suspended connection. Autocommit: each call is its own unit,
+        so a later failure can never roll back an already-recorded fact."""
+        last: Exception | None = None
+        for _ in range(retries + 1):
+            try:
+                with psycopg.connect(self._dsn, connect_timeout=15, autocommit=True) as conn:
+                    with conn.cursor() as cur:
+                        return fn(cur)
+            except (psycopg.OperationalError, psycopg.errors.AdminShutdown) as e:
+                last = e
+        raise last  # type: ignore[misc]
 
     def table_counts(self) -> dict:
-        return {table: self._count(table) for table in TABLES}
+        def q(cur):
+            out = {}
+            for table in TABLES:
+                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                out[table] = cur.fetchone()[0]
+            return out
 
-    def _count(self, table: str) -> int:
-        self._cur.execute(f"SELECT COUNT(*) FROM {table}")
-        return self._cur.fetchone()[0]
+        return self._run(q)
 
     def coverage(self) -> dict:
         """Which years Neon actually holds. This is what the probe compares the
         computed window against - the local disk cache is not the question."""
-        out = {}
-        for table, column in (
-            ("bts_t100", "year"),
-            ("bts_ontime", "year"),
-            ("airport_financials", "fy"),
-        ):
-            try:
-                self._cur.execute(f"SELECT DISTINCT {column} FROM {table} ORDER BY 1")
-                out[f"{table}_years"] = [r[0] for r in self._cur.fetchall()]
-            except Exception:
-                out[f"{table}_years"] = []
-        return out
+        def q(cur):
+            out = {}
+            for table, column in (
+                ("bts_t100", "year"),
+                ("bts_ontime", "year"),
+                ("airport_financials", "fy"),
+            ):
+                try:
+                    cur.execute(f"SELECT DISTINCT {column} FROM {table} ORDER BY 1")
+                    out[f"{table}_years"] = [r[0] for r in cur.fetchall()]
+                except Exception:
+                    out[f"{table}_years"] = []
+            return out
+
+        return self._run(q)
 
     def latest_period(self) -> str | None:
-        self._cur.execute(
-            "SELECT to_char(GREATEST("
-            "COALESCE((SELECT MAX(make_date(year, month, 1)) FROM bts_t100), DATE '0001-01-01'), "
-            "COALESCE((SELECT MAX(make_date(year, month, 1)) FROM bts_ontime), DATE '0001-01-01')"
-            "), 'YYYY-MM')"
-        )
-        row = self._cur.fetchone()
-        return row[0] if row else None
+        def q(cur):
+            cur.execute(
+                "SELECT to_char(GREATEST("
+                "COALESCE((SELECT MAX(make_date(year, month, 1)) FROM bts_t100), DATE '0001-01-01'), "
+                "COALESCE((SELECT MAX(make_date(year, month, 1)) FROM bts_ontime), DATE '0001-01-01')"
+                "), 'YYYY-MM')"
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+
+        return self._run(q)
 
     def open_run(self, trigger: str) -> int:
-        self._cur.execute(
-            "INSERT INTO data_refresh_runs (status, trigger) VALUES ('running', %s) RETURNING id",
-            (trigger,),
-        )
-        return self._cur.fetchone()[0]
+        def q(cur):
+            cur.execute(
+                "INSERT INTO data_refresh_runs (status, trigger) VALUES ('running', %s) "
+                "RETURNING id",
+                (trigger,),
+            )
+            return cur.fetchone()[0]
+
+        return self._run(q)
 
     def close_run(self, run_id: int, status: str, **fields) -> None:
-        columns = ["status = %s", "finished_at = now()"]
-        values: list = [status]
-        for name in ("sources", "rows_before", "rows_after"):
-            if name in fields:
-                columns.append(f"{name} = %s")
-                values.append(Json(fields[name]))
-        for name in ("latest_period", "error"):
-            if name in fields:
-                columns.append(f"{name} = %s")
-                values.append(fields[name])
-        values.append(run_id)
-        self._cur.execute(
-            f"UPDATE data_refresh_runs SET {', '.join(columns)} WHERE id = %s", values
-        )
+        def q(cur):
+            columns = ["status = %s", "finished_at = now()"]
+            values: list = [status]
+            for name in ("sources", "rows_before", "rows_after"):
+                if name in fields:
+                    columns.append(f"{name} = %s")
+                    values.append(Json(fields[name]))
+            for name in ("latest_period", "error"):
+                if name in fields:
+                    columns.append(f"{name} = %s")
+                    values.append(fields[name])
+            values.append(run_id)
+            cur.execute(
+                f"UPDATE data_refresh_runs SET {', '.join(columns)} WHERE id = %s", values
+            )
+
+        # Two retries, not one: this is the last write of the run and the one
+        # that must not be lost. A row left `running` is worse than a wrong
+        # status - the freshness endpoint treats it as a live run.
+        self._run(q, retries=2)
 
 
 # ---------------------------------------------------------------------------
@@ -571,11 +638,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     env = load_env()
-    with psycopg.connect(env["DATABASE_URL"], connect_timeout=15, autocommit=True) as conn:
+    dsn = env["DATABASE_URL"]
+    # Schema application gets its own connection and closes it immediately.
+    # Nothing may hold a connection across the build - see RunRecorder.
+    with psycopg.connect(dsn, connect_timeout=15, autocommit=True) as conn:
         with conn.cursor() as cur:
             apply_schema_refresh(cur)
-            recorder = RunRecorder(cur)
-            return run_and_exit_code(recorder, args.trigger)
+    return run_and_exit_code(RunRecorder(dsn), args.trigger)
 
 
 if __name__ == "__main__":
