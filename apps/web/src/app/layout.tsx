@@ -92,7 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // standalone with no Clerk component ever instantiated.
   return (
     <html lang="en">
-      <body className="bg-white text-slate-900 antialiased">
+      <body className="bg-white text-slate-900 antialiased" suppressHydrationWarning>
         {clerkEnabled ? (
           <ClerkProvider
             signInUrl="/sign-in"
