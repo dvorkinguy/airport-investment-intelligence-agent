@@ -44,10 +44,39 @@ case for a workflow runtime:
 
 | Option | Verdict |
 |---|---|
-| **Cloud Run Job + Cloud Scheduler** | **Chosen.** The image that already runs the agent already contains the Python environment that runs the builders, so the runtime is proven rather than new. Retries, a 24h task ceiling, execution history and Cloud Monitoring alerting come with the platform. No second control plane. |
+| **Cloud Run Job + Cloud Scheduler** | **Chosen.** Retries, a 24h task ceiling, execution history and Cloud Monitoring alerting come with the platform, and the project already runs Cloud Run. No second control plane. |
 | n8n calling a Cloud Run Job | Rejected. Adds a workflow runtime whose only responsibility would be calling a scheduler the platform already provides. Fails ADR-000 principle 1: every component must justify itself against the deliverable. It is also unverifiable to a reviewer, who can read this repository but cannot inspect a private automation host. |
 | GitHub Actions on a cron | Rejected. Public run history is genuinely attractive, but it places `DATABASE_URL` as a secret on a public repository and makes the CI system perform production writes. |
 | n8n re-implementing the builders | Rejected outright. Discards tested Python and asks a workflow engine to move hundreds of megabytes. |
+
+## The job needs its own image
+
+An earlier draft of this ADR assumed the job could simply reuse the agent's container,
+on the reasoning that the Python environment was already proven. That was wrong, and the
+repository says so plainly:
+
+- `.dockerignore` excludes `apps/`, `data/`, `db/` and `ingestion/` under the comment
+  "Not part of the backend image".
+- The `Dockerfile` builder stage copies only `services/`.
+- `pyproject.toml` wheels only `services/agent`.
+
+So `ingestion/` is not in the agent image, and it is absent by decision rather than by
+oversight. The agent serves questions; it has no reason to carry a data pipeline.
+
+**Decision: a separate `Dockerfile.ingest`, pushed to the same Artifact Registry repository
+under its own tag.** The shared `Dockerfile` and `.dockerignore` are not modified, so
+building the ingest image cannot affect the running service.
+
+Consequence worth stating because it is the easy mistake: `.dockerignore` strips those paths
+from the build *context*, before any `COPY` executes. A second Dockerfile alone does not
+recover them - the ingest build needs its own ignore scope. Verification is listing the files
+inside the built image, not reading the Dockerfile and assuming.
+
+**Identities.** The job runs as `airport-agent-run`, which already holds
+`roles/secretmanager.secretAccessor` scoped to the `database-url` secret and nothing
+project-wide. Cloud Scheduler triggers it as a separate, dedicated invoker service account
+holding `roles/run.invoker` on that job alone. The thing that triggers a run and the thing
+that performs it are not the same identity.
 
 ## Cadence: weekly poll, monthly effective refresh
 
