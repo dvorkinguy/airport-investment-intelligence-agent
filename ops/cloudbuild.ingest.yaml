@@ -1,0 +1,78 @@
+# Cloud Build for the ingestion job image (Cloud Run Job `airport-ingest`).
+#
+#   gcloud builds submit --config ops/cloudbuild.ingest.yaml \
+#     --substitutions=_GIT_SHA=$(git rev-parse --short=12 HEAD)
+#
+# Builds from a STAGED context under /workspace, not repo root. Repo root is
+# where the shared `.dockerignore` lives, and that file deliberately excludes
+# ingestion/ and db/ from the agent image - relying on a Dockerfile-scoped
+# override (Dockerfile.ingest.dockerignore, a BuildKit-only feature) would
+# have made this build depend on an assumption nobody could verify without
+# local Docker. Staging an explicit context has no such assumption: if
+# ingestion/ or db/ are missing from the upload, `cp -r` fails the build
+# loudly instead of silently shipping an incomplete image.
+#
+# The verify step actually lists the image's filesystem rather than trusting
+# that the COPY worked - same principle as verifying the scheduler by firing
+# it, not by reading its "enabled" field (ADR-005).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: stage-context
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eux
+        test -d ingestion
+        test -d db
+        rm -rf /workspace/ingest-context
+        mkdir -p /workspace/ingest-context
+        cp -r ingestion /workspace/ingest-context/ingestion
+        cp -r db /workspace/ingest-context/db
+        cp pyproject.toml uv.lock README.md /workspace/ingest-context/
+
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - --build-arg
+      - GIT_SHA=${_GIT_SHA}
+      - -t
+      - ${_IMAGE}
+      - -f
+      - Dockerfile.ingest
+      - /workspace/ingest-context
+    waitFor: ["stage-context"]
+
+  - name: gcr.io/cloud-builders/docker
+    id: verify-contents
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eux
+        echo "--- /app top level ---"
+        docker run --rm --entrypoint find ${_IMAGE} /app -maxdepth 2
+        echo "--- ingestion/ present and importable ---"
+        docker run --rm --entrypoint python ${_IMAGE} -c "import ingestion, pathlib; p = pathlib.Path(ingestion.__path__[0]); print(sorted(x.name for x in p.iterdir()))"
+        echo "--- db/schema_refresh.sql present (fails until Terminal 1 lands - expected) ---"
+        docker run --rm --entrypoint test ${_IMAGE} -f /app/db/schema_refresh.sql && echo FOUND || echo "not yet - ingestion/refresh.py not landed"
+        echo "--- data/raw/ writable and empty (nothing baked in) ---"
+        docker run --rm --entrypoint sh ${_IMAGE} -c "test -d /app/data/raw && touch /app/data/raw/.write-test && ls -la /app/data/raw && rm /app/data/raw/.write-test && echo WRITABLE"
+        echo "--- requests importable (build_bts_t100.py imports it directly; not in pyproject.toml deps, only via uv.lock) ---"
+        docker run --rm --entrypoint python ${_IMAGE} -c "import requests; print('requests', requests.__version__, 'OK')"
+        echo "--- image size ---"
+        docker image inspect ${_IMAGE} --format "{{.Size}}"
+    waitFor: ["build"]
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _GIT_SHA: dev
+  # Same repository the agent image uses, distinct name so `gcloud run jobs
+  # list` / `gcloud artifacts docker images list` never confuse the two.
+  _IMAGE: europe-west3-docker.pkg.dev/airport-intel-agent/cloud-run-source-deploy/airport-ingest:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
