@@ -38,7 +38,12 @@ export interface FreshnessStatus {
  * has to handle. The landing page must render nothing rather than guess. */
 export async function checkFreshness(signal?: AbortSignal): Promise<FreshnessStatus | null> {
   try {
-    const res = await fetch(`${getApiUrl()}/freshness`, { signal, cache: "no-store" });
+    // Same-origin on purpose, via the /freshness rewrite in next.config.ts.
+    // Calling the backend's absolute URL from the browser makes this line
+    // depend on CORS, and a CORS gap blanks it in production for a reason
+    // that is completely invisible in local development - verified: it broke
+    // exactly that way on the first Vercel preview.
+    const res = await fetch("/freshness", { signal, cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as FreshnessStatus;
   } catch {

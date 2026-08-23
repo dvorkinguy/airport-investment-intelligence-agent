@@ -55,6 +55,7 @@ def build_llm(settings: Settings | None = None) -> BaseChatModel:
         temperature=s.llm_temperature,
         timeout=s.llm_timeout_seconds,
         max_retries=s.llm_max_retries,
+        max_tokens=s.llm_max_tokens,
         default_headers={
             "HTTP-Referer": "https://airport.guydvorkin.com",
             "X-Title": "Airport Investment Intelligence Agent",

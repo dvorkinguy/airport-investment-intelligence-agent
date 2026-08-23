@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_timeout_seconds: float = 60.0
     llm_max_retries: int = 2
+    # Completion cap. Unset, langchain-openai sends the model's own default -
+    # 64000 for Claude Sonnet 4.5 - and OpenRouter reserves that whole amount
+    # against the key's balance before answering. That turned a nearly-spent
+    # key into a hard 402 on every request even though a real answer here
+    # costs a fraction of a cent: measured median $0.047/question, and no
+    # answer this agent produces is anywhere near 64k tokens. Capping it
+    # removes an entire failure mode where the demo dies for a visitor while
+    # the balance is technically non-zero.
+    llm_max_tokens: int = 4096
 
     # --- Data plane ---
     database_url: SecretStr | None = None
