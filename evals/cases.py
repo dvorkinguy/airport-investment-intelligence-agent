@@ -26,6 +26,17 @@ class EvalCase:
     forbidden_terms: tuple[str, ...] = ()
     notes: str = ""
     optional_tools: tuple[str, ...] = field(default_factory=tuple)
+    #: For questions with no golden figures (real visitor questions): the answer
+    #: must still rest on at least this many tool calls.
+    min_tool_calls: int = 0
+
+
+def smoke_case(case_id: str, question: str) -> EvalCase:
+    """A real question with no golden answer: graded on behaviour, not figures."""
+    return EvalCase(
+        id=case_id, question=question, required_tools=(), required_numbers=(),
+        min_tool_calls=1,
+    )
 
 
 CASES: tuple[EvalCase, ...] = (

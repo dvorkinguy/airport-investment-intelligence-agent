@@ -223,3 +223,23 @@ async def test_system_prompt_is_prepended_but_not_stored(repo: FixtureRepo) -> N
 )
 def test_assumption_reducer_dedupes_in_order(left, right, expected) -> None:
     assert merge_assumptions(left, right) == expected
+
+
+# --- Provider pinning (AGENT_PROVIDERS) -----------------------------------
+
+
+def test_no_providers_lets_openrouter_route() -> None:
+    from agent.graph import build_llm
+
+    s = Settings(openrouter_api_key="sk-or-test", agent_providers="")
+    assert s.provider_routing is None
+    assert not build_llm(s).extra_body
+
+
+def test_pinned_provider_is_sent_with_fallbacks_off() -> None:
+    from agent.graph import build_llm
+
+    s = Settings(openrouter_api_key="sk-or-test", agent_providers=" z-ai , fireworks ")
+    expected = {"only": ["z-ai", "fireworks"], "allow_fallbacks": False, "require_parameters": True}
+    assert s.provider_routing == expected
+    assert build_llm(s).extra_body == {"provider": expected}

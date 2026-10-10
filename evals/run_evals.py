@@ -3,6 +3,11 @@
     uv run python -m evals.run_evals            # all four cases
     uv run python -m evals.run_evals --case q3  # one case, with the full answer
     uv run python -m evals.run_evals --verbose  # print every answer
+    uv run python -m evals.run_evals --repeat 3 # every case three times
+
+    # Real visitor questions (one per line) on the real database, graded on
+    # behaviour only - tools used, no failure loop, assumptions stated:
+    uv run python -m evals.run_evals --questions q.txt --backend postgres --repeat 3
 
 Exit code 0 when every case passes, 1 otherwise - safe to wire into CI.
 """
@@ -18,7 +23,7 @@ from pathlib import Path
 from agent import configure_event_loop
 from agent.logging_config import configure
 from agent.settings import get_settings
-from evals.cases import CASES
+from evals.cases import CASES, smoke_case
 from evals.graders import CaseResult
 from evals.runner import run_all
 
@@ -61,6 +66,16 @@ def main() -> int:
     parser.add_argument("--case", help="substring of a case id to run just one")
     parser.add_argument("--verbose", action="store_true", help="print each full answer")
     parser.add_argument("--report", type=Path, help="write a JSON report to this path")
+    parser.add_argument("--repeat", type=int, default=1, help="run every case N times")
+    parser.add_argument(
+        "--questions", type=Path,
+        help="file of real questions, one per line, run instead of the golden cases",
+    )
+    parser.add_argument(
+        "--backend", choices=("fixture", "postgres"), default="fixture",
+        help="data behind the tools; golden cases only hold on fixture",
+    )
+    parser.add_argument("--concurrency", type=int, default=4, help="parallel cases")
     args = parser.parse_args()
 
     configure_event_loop()
@@ -74,14 +89,24 @@ def main() -> int:
         )
         return 2
 
-    cases = tuple(c for c in CASES if not args.case or args.case in c.id)
+    if args.questions:
+        lines = [q.strip() for q in args.questions.read_text(encoding="utf-8").splitlines()]
+        cases = tuple(smoke_case(f"real{i + 1:02d}", q) for i, q in enumerate(x for x in lines if x))
+    else:
+        cases = tuple(c for c in CASES if not args.case or args.case in c.id)
     if not cases:
         print(f"no case matches {args.case!r}", file=sys.stderr)
         return 2
+    if args.backend == "postgres" and not settings.database_dsn:
+        print("--backend postgres needs DATABASE_URL", file=sys.stderr)
+        return 2
 
-    print(BANNER)
-    print(f"model: {settings.agent_model}   cases: {len(cases)}")
-    results = asyncio.run(run_all(cases, settings=settings))
+    print(BANNER if args.backend == "fixture" else "Evals run against the live Neon database.\n")
+    print(
+        f"model: {settings.agent_model}   providers: {settings.agent_providers or '(OpenRouter picks)'}"
+        f"   cases: {len(cases)} x {args.repeat}"
+    )
+    results = asyncio.run(_run(cases, settings, args))
     print(render(results, args.verbose))
 
     if args.report:
@@ -90,6 +115,9 @@ def main() -> int:
             json.dumps(
                 {
                     "model": settings.agent_model,
+                    "providers": settings.agent_providers,
+                    "backend": args.backend,
+                    "repeat": args.repeat,
                     "passed": sum(1 for r in results if r.passed),
                     "total": len(results),
                     "cases": [
@@ -102,6 +130,8 @@ def main() -> int:
                             "error": r.error,
                             "answer": r.answer,
                             "assumptions": r.assumptions,
+                            "tool_failures": r.tool_failures,
+                            "capped": r.capped,
                         }
                         for r in results
                     ],
@@ -113,6 +143,30 @@ def main() -> int:
         print(f"\nreport written to {args.report}")
 
     return 0 if all(r.passed for r in results) else 1
+
+
+async def _run(cases, settings, args) -> list[CaseResult]:
+    repo = None
+    if args.backend == "postgres":
+        from agent.repository import PostgresRepo
+
+        repo = PostgresRepo(
+            settings.database_dsn or "",
+            min_size=settings.db_pool_min_size,
+            max_size=settings.db_pool_max_size,
+            statement_timeout_ms=settings.db_statement_timeout_ms,
+            max_idle_seconds=settings.db_pool_max_idle_seconds,
+            max_lifetime_seconds=settings.db_pool_max_lifetime_seconds,
+        )
+        await repo.open()
+    try:
+        return await run_all(
+            cases, repo=repo, settings=settings,
+            repeat=args.repeat, concurrency=args.concurrency,
+        )
+    finally:
+        if repo is not None:
+            await repo.close()
 
 
 if __name__ == "__main__":

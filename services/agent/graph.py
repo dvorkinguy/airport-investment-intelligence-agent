@@ -48,8 +48,10 @@ def build_llm(settings: Settings | None = None) -> BaseChatModel:
             "OPENROUTER_API_KEY is not set. Add it to .env (see .env.example) - "
             "the agent cannot reason without an LLM gateway."
         )
+    routing = s.provider_routing
     return ChatOpenAI(
         model=s.agent_model,
+        extra_body={"provider": routing} if routing else None,
         api_key=s.openrouter_key,
         base_url=s.openrouter_base_url,
         temperature=s.llm_temperature,

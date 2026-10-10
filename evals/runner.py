@@ -10,10 +10,10 @@ import asyncio
 import time
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from agent.graph import build_graph
+from agent.graph import _tool_rounds, build_graph
 from agent.repository import AirportRepo, FixtureRepo
 from agent.settings import Settings, get_settings
 from evals.cases import CASES, EvalCase
@@ -71,6 +71,11 @@ async def run_case(
         if isinstance(m, AIMessage)
         for call in (m.tool_calls or [])
     ]
+    tool_failures = [
+        f"{m.name}: {(m.artifact or {}).get('error') or m.content}"
+        for m in messages
+        if isinstance(m, ToolMessage) and (m.artifact or {}).get("ok") is False
+    ]
     answer = ""
     for m in reversed(messages):
         if isinstance(m, AIMessage) and not m.tool_calls and message_text(m):
@@ -86,6 +91,8 @@ async def run_case(
             tools_called=tools_called,
             assumptions=list(state.get("assumptions", [])),
             latency_s=round(time.perf_counter() - started, 2),
+            tool_failures=tool_failures,
+            capped=_tool_rounds(state) >= s.max_tool_iterations,
         ),
     )
 
@@ -96,14 +103,28 @@ async def run_all(
     repo: AirportRepo | None = None,
     llm: BaseChatModel | None = None,
     settings: Settings | None = None,
+    repeat: int = 1,
+    concurrency: int = 0,
 ) -> list[CaseResult]:
-    """Cases are independent; run them concurrently."""
+    """Cases are independent; run them concurrently.
+
+    ``repeat`` runs every case that many times: one pass of a non-deterministic
+    model proves little (GLM passed q1 once, then failed the same question live).
+    ``concurrency`` > 0 bounds parallel cases, for a small database pool.
+    """
     shared_repo = repo or FixtureRepo()
+    gate = asyncio.Semaphore(concurrency) if concurrency > 0 else None
+
+    async def one(c: EvalCase, k: int) -> CaseResult:
+        if gate is None:
+            r = await run_case(c, repo=shared_repo, llm=llm, settings=settings)
+        else:
+            async with gate:
+                r = await run_case(c, repo=shared_repo, llm=llm, settings=settings)
+        if repeat > 1:
+            r.case_id = f"{c.id}#{k + 1}"
+        return r
+
     return list(
-        await asyncio.gather(
-            *(
-                run_case(c, repo=shared_repo, llm=llm, settings=settings)
-                for c in cases
-            )
-        )
+        await asyncio.gather(*(one(c, k) for c in cases for k in range(repeat)))
     )

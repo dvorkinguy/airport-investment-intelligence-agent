@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     # removes an entire failure mode where the demo dies for a visitor while
     # the balance is technically non-zero.
     llm_max_tokens: int = 4096
+    # OpenRouter hosts allowed to serve ``agent_model``, comma-separated slugs
+    # (e.g. "z-ai"). Empty = OpenRouter picks per request. A model can be served
+    # by dozens of hosts, many on fp4 quantizations; on 2026-10-10 GLM 5.3 Flash
+    # passed its evals and then, in production, called rank_airports ten times
+    # without its required argument until the turn was capped. Pinned, fallbacks
+    # are off: a pinned host that is down fails the request rather than quietly
+    # handing it to a host nobody evaluated.
+    agent_providers: str = ""
 
     # --- Data plane ---
     database_url: SecretStr | None = None
@@ -114,6 +122,14 @@ class Settings(BaseSettings):
     @property
     def database_dsn(self) -> str | None:
         return self.database_url.get_secret_value() if self.database_url else None
+
+    @property
+    def provider_routing(self) -> dict | None:
+        """OpenRouter ``provider`` request field, or None to let OpenRouter route."""
+        hosts = [h.strip() for h in self.agent_providers.split(",") if h.strip()]
+        if not hosts:
+            return None
+        return {"only": hosts, "allow_fallbacks": False, "require_parameters": True}
 
     @property
     def openrouter_key(self) -> str | None:

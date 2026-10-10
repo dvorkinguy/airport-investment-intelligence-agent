@@ -18,11 +18,12 @@ from langchain_core.messages import AIMessage
 
 from agent.repository import FixtureRepo
 from agent.settings import Settings, get_settings
-from evals.cases import CASES, EvalCase
+from evals.cases import CASES, EvalCase, smoke_case
 from evals.graders import (
     CaseResult,
     grade,
     grade_assumptions,
+    grade_loop,
     grade_numbers,
     grade_terms,
     grade_tools,
@@ -166,3 +167,80 @@ def test_golden_cases_against_a_live_model() -> None:
     results = asyncio.run(run_all(CASES))
     failures = [f"{r.case_id}: {r.failures or r.error}" for r in results if not r.passed]
     assert not failures, "\n".join(failures)
+
+
+# --- The loop grader: the 2026-10-10 GLM production failure ---------------
+
+
+def test_loop_grader_allows_one_failure_and_rejects_a_repeat() -> None:
+    err = "rank_airports: rank_airports requires either a region or a list of states"
+    assert grade_loop([err], capped=False).passed
+    assert not grade_loop([err, err], capped=False).passed
+    assert not grade_loop([], capped=True).passed
+
+
+def test_smoke_case_needs_at_least_one_tool_call() -> None:
+    c = smoke_case("real01", "Which New England airports should expand?")
+    assert not grade_tools(c, []).passed
+    assert grade_tools(c, ["rank_airports"]).passed
+
+
+async def test_runner_fails_the_glm_replay_unchanged_bad_calls_until_the_cap() -> None:
+    """What 00020 did live: rank_airports with no region, again and again."""
+    from tests.conftest import ScriptedChatModel, tool_call_message
+
+    s = Settings(openrouter_api_key="sk-or-test", repo_backend="fixture")
+    llm = ScriptedChatModel(
+        responses=[
+            *(tool_call_message("rank_airports", {}, f"c{i}") for i in range(s.max_tool_iterations)),
+            AIMessage(content=GOOD_Q1_ANSWER),
+        ]
+    )
+    result = await run_case(case("q1"), repo=FixtureRepo(), llm=llm, settings=s)
+    assert result.capped
+    assert len(result.tool_failures) == s.max_tool_iterations
+    assert not result.passed
+    assert any(f.startswith("loop:") for f in result.failures)
+
+
+async def test_runner_passes_a_model_that_reads_the_error_and_fixes_the_call() -> None:
+    from tests.conftest import ScriptedChatModel, tool_call_message
+
+    llm = ScriptedChatModel(
+        responses=[
+            tool_call_message("rank_airports", {}, "c1"),
+            tool_call_message("rank_airports", {"region": "new_england", "limit": 5}, "c2"),
+            AIMessage(content=GOOD_Q1_ANSWER),
+        ]
+    )
+    result = await run_case(
+        case("q1"),
+        repo=FixtureRepo(),
+        llm=llm,
+        settings=Settings(openrouter_api_key="sk-or-test", repo_backend="fixture"),
+    )
+    assert len(result.tool_failures) == 1
+    assert not result.capped
+    assert result.passed, result.failures
+
+
+async def test_run_all_repeats_every_case() -> None:
+    from tests.conftest import ScriptedChatModel, tool_call_message
+
+    llm = ScriptedChatModel(
+        responses=[
+            tool_call_message("rank_airports", {"region": "new_england", "limit": 5}),
+            AIMessage(content=GOOD_Q1_ANSWER),
+        ]
+    )
+    results = await run_all(
+        (case("q1"),),
+        repo=FixtureRepo(),
+        llm=llm,
+        settings=Settings(openrouter_api_key="sk-or-test", repo_backend="fixture"),
+        repeat=3,
+        concurrency=1,
+    )
+    assert [r.case_id for r in results] == [
+        "q1_new_england_expansion#1", "q1_new_england_expansion#2", "q1_new_england_expansion#3",
+    ]
